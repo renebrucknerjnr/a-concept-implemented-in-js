@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Tubes</title>
+	<style>
+		:root {
+			color-scheme: light only !important;
+		}
+
+		body {
+			overflow: hidden;
+			padding:0px;
+			margin:0px;
+			background: #1E1E1E;
+		}
+	</style>
+</head>
+<body>
+
+<script>
+
+function floor(n) {
+	return Math.floor(n);
+}
+
+function fract(n) {
+	return n - floor(n);
+}
+
+function mod(n, m) {
+	return fract(n / m) * m;
+}
+
+function modR(n, m) {
+	return floor(n / m) * m;
+}
+
+function rgbToHex(r, g, b) {
+    r = floor(r); g = floor(g); b = floor(b);
+    r = r.toString(16);
+    g = g.toString(16);
+    b = b.toString(16);
+    return ("0".repeat(2-r.length)+r) + ("0".repeat(2-g.length)+g) + ("0".repeat(2-b.length)+b);
+}
+
+function smooth(n) {
+    return n*n*(3 - 2*n);
+}
+
+function lerp(a, b, t) {
+    return a*(1-t) + b*t;
+}
+
+function catmullRom(p0, p1, p2, p3, t, T=0) { // https://www.desmos.com/calculator/5rpun0qzkg
+	let t2 = t*t;
+	let t3 = t2*t;
+
+	let a = (2*t3 - 3*t2 + 1);
+	let b = (-2*t3 + 3*t2);
+	let c = (t3 - 2*t2 + t);
+	let d = (t3 - t2);
+
+	let e = (1 - T) * 0.5;
+	let f_X = (p2.x - p0.x);
+	let f_Y = (p2.y - p0.y);
+	let g_X = (p3.x - p1.x);
+	let g_Y = (p3.y - p1.y);
+
+	let one_X = a * p1.x;
+	let two_X = b * p2.x;
+	let three_X = c * e * f_X;
+	let four_X = d * e * g_X;
+
+	let one_Y = a * p1.y;
+	let two_Y = b * p2.y;
+	let three_Y = c * e * f_Y;
+	let four_Y = d * e * g_Y;
+
+	let x = one_X + two_X + three_X + four_X;
+	let y = one_Y + two_Y + three_Y + four_Y;
+	return new Point(x,y);
+}
+
+function drawCatmullRom(ctx, points, steps = 20, T=0) {
+    if (points.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[Math.max(0, i - 1)];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[Math.min(points.length - 1, i + 2)];
+
+        for (let j = 1; j <= steps; j++) {
+            const t = j / steps;
+            const p = catmullRom(p0, p1, p2, p3, t, T);
+            ctx.lineTo(p.x, p.y);
+        }
+    }
+
+    ctx.stroke();
+}
+
+function drawCatmullRomBezier(ctx, points) {
+    if (points.length < 4) return;
+
+    ctx.beginPath();
+    ctx.moveTo(points[1].x, points[1].y);
+
+    for (let i = 0; i < points.length - 3; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        const p2 = points[i + 2];
+        const p3 = points[i + 3];
+
+        const cp1 = {
+            x: p1.x + (p2.x - p0.x) / 6,
+            y: p1.y + (p2.y - p0.y) / 6
+        };
+
+        const cp2 = {
+            x: p2.x - (p3.x - p1.x) / 6,
+            y: p2.y - (p3.y - p1.y) / 6
+        };
+
+        ctx.bezierCurveTo(
+            cp1.x, cp1.y,
+            cp2.x, cp2.y,
+            p2.x, p2.y
+        );
+    }
+
+    ctx.stroke();
+}
+
+function secureRandomFloat() {
+  const array = crypto.getRandomValues(new Uint32Array(1));
+
+  return array[0] / 0xffffffff;
+}
+
+function hash12(a, b = 10) { // https://www.shadertoy.com/view/WXSBDV
+	let x = a * 256.8 + 0.2;
+	let y = b * 256.8 + 0.2;
+	let z = x;
+
+	x = fract(x * 0.1031);
+	y = fract(y * 0.1031);
+	z = fract(z * 0.1031);
+
+	x += x * (y + 33.33);
+	y += y * (z + 33.33);
+	z += z * (x + 33.33);
+
+	return fract((x + y) * z);
+	/* ((fract(x * 0.1031) + fract(x * 0.1031) * (fract(y * 0.1031) + 33.33)) + (fract(y * 0.1031) + fract(y * 0.1031) * (fract(x * 0.1031) + 33.33))) * (fract(x * 0.1031) + fract(x * 0.1031) * (fract(x * 0.1031) + 33.33))
+ 	 =
+ 	fract(x * 0.1031)*(fract(x * 0.1031)+34.33) * ((2*fract(y * 0.1031) + 34.33)*fract(x * 0.1031) + 34.33*fract(y * 0.1031)) */
+}
+
+function circumCircle(p1,p2,p3) {
+	// https://www.desmos.com/calculator/okei9kr8yi
+
+	// delta x and y
+	let dx1 = p1.x - p2.x;
+	let dy1 = p1.y - p2.y;
+
+	let dx2 = p2.x - p3.x;
+	let dy2 = p2.y - p3.y;
+
+	let dx3 = p3.x - p1.x;
+	let dy3 = p3.y - p1.y;
+
+	// triangle sides
+	let l1 = Math.sqrt(dx1*dx1 + dy1*dy1);
+	let l2 = Math.sqrt(dx2*dx2 + dy2*dy2);
+	let l3 = Math.sqrt(dx3*dx3 + dy3*dy3);
+
+	let s = (l1 + l2 + l3) / 2;
+
+	// triangle area
+	let a = Math.sqrt(s * (s - l1) * (s - l2) * (s - l3));
+
+	// cirlce radius
+	let r = (l1 * l2 * l3) / (4 * a);
+
+	// angles between vertices
+	// let a1 = Math.atan2(dy1, dx1);
+
+	// midpoints of sides
+	// let m1 = {x: p1.x - l1 / 2 * Math.cos(a1), y: p1.y - l1 / 2 * Math.sin(a1)};
+	let m1 = {x: p1.x - l1 * (dx1 / l1) / 2, y: p1.y - l1 * (dy1 / l1) / 2}; // normalized dx and dy
+	let m2 = {x: p2.x - l2 * (dx2 / l2) / 2, y: p2.y - l2 * (dy2 / l2) / 2};
+	let m3 = {x: p3.x - l3 * (dx3 / l3) / 2, y: p3.y - l3 * (dy3 / l3) / 2};
+
+	// perpendicular angles
+	// let piOverTwo = Math.PI / 2;
+	// let TAU = Math.PI * 2;
+	// let a12 = mod(a1 + piOverTwo, TAU);
+
+	// slope and y-intercept (y = mx + b)
+	/*	
+		s1 = Math.tan(a12)
+		s1 = Math.tan(mod(Math.atan2(p1.y - p2.y, p1.x - p2.x) + piOverTwo, TAU))
+
+		theta = Math.atan2(dy, dx)
+		s1 = Math.tan(theta + piOverTwo)
+		becomes: (-dx / dy)
+			because: cos(theta) = dx / r
+					 sin(theta) = dy / r
+
+					 [tan(t) = sin(t)/cos(t)]
+					 [tan(t + 90deg) = cos(t)/sin(t)]
+
+			so:  -(cos(theta) / sin(theta)) = -((dx / r) / (dy / r)) = -(dx / dy)
+
+		therefore:
+			s1 = -(p1.x - p2.x) / (p1.y - p2.y)
+			s1 = (p2.x - p1.x) / (p1.y - p2.y)
+
+	*/
+	let s1 = -dx1 / dy1; // slope
+	let s2 = -dx2 / dy2;
+	let s3 = -dx3 / dy3;
+
+	let b1 = m1.y - s1 * m1.x; // intercept
+	let b2 = m2.y - s2 * m2.x;
+	let b3 = m3.y - s3 * m3.x;
+
+	// Solving for x and then y with three equations (y=mx+b)
+	let cx = (b2 - b1) / (s1 - s2);
+	let cy = s3 * cx + b3
+	return {x: cx, y: cy, r: r};
+}
+
+function isCollinear(p1, p2, p3) {
+    const cross =
+        (p2.x - p1.x) * (p3.y - p1.y) -
+        (p2.y - p1.y) * (p3.x - p1.x);
+
+    const EPSILON = 1e-10;
+    return Math.abs(cross) < EPSILON;
+}
+
+function hashArrayToNumber(arr) {
+  // 1. Serialize the array to a consistent string format
+  const str = JSON.stringify(arr);
+  
+  // 2. Initialize FNV-1a 32-bit offset basis
+  let hash = 2166136261;
+  
+  for (let i = 0; i < str.length; i++) {
+    // XOR the bottom with the current character
+    hash ^= str.charCodeAt(i);
+    // Multiply by the 32-bit FNV prime
+    hash = Math.imul(hash, 16777619);
+  }
+  
+  // Return as an unsigned 32-bit integer
+  return hash >>> 0;
+}
+
+function shuffleArrayInPlace(arr, onlyOnce=false) {
+	if (onlyOnce) { let arrHash = hashArrayToNumber(arr); }
+	for (let i = arr.length - 1; i >= 0; i--) {
+		if (onlyOnce) {
+			let j = parseInt(hash12(i, arrHash)*i);
+		} else {
+			let j = parseInt(secureRandomFloat()*i);
+		}
+		[arr[i], arr[j]] = [arr[j], arr[i]];
+	}
+}
+
+function shuffleArray(arrIn, onlyOnce=false) {
+	let arr = Array.from(arrIn);
+	let arrHash;
+	if (onlyOnce) { arrHash = hashArrayToNumber(arr); }
+	for (let i = arr.length - 1; i >= 0; i--) {
+		let j;
+		if (onlyOnce) {
+			j = parseInt(hash12(i, arrHash)*i);
+		} else {
+			j = parseInt(secureRandomFloat()*i);
+		}
+		[arr[i], arr[j]] = [arr[j], arr[i]];
+	}
+	return arr;
+}
+
+
+class Point {
+	constructor(x,y) {
+		this.x = x;
+		this.y = y;
+	}
+
+	equals(p) {
+		return (this.x == p.x && this.y == p.y);
+	}
+}
+
+class Segment {
+	constructor(p1, p2) {
+		this.p1 = p1;
+		this.p2 = p2;
+		this.length = -1;
+		this.computeLength();
+	}
+
+	computeLength() {
+		let dx = this.p1.x - this.p2.x;
+		let dy = this.p1.y - this.p2.y;
+		this.length = Math.sqrt(dx * dx + dy * dy);
+	}
+
+	equals(s) { // direction doesn't matter (for now)
+		return ((this.p1.equals(s.p1) && this.p2.equals(s.p2)) || (this.p1.equals(s.p2) && this.p2.equals(s.p1)));
+	}
+
+	intersect(seg2) {
+		// https://www.desmos.com/calculator/l7csvkyy6v
+
+		let W = (this.p1.x - this.p2.x) * (seg2.p1.y - seg2.p2.y) - (this.p1.y - this.p2.y) * (seg2.p1.x - seg2.p2.x);
+
+		let Wt = (this.p1.x - seg2.p1.x) * (seg2.p1.y - seg2.p2.y) - (this.p1.y - seg2.p1.y) * (seg2.p1.x - seg2.p2.x);
+
+		let Wu = (this.p1.x - seg2.p1.x) * (this.p1.y - this.p2.y) - (this.p1.y - seg2.p1.y) * (this.p1.x - this.p2.x);
+
+		if (W == 0) return [false, 0, 0];
+		let t = Wt/W;
+		let u = Wu/W;
+
+		let Ix = this.p1.x + t * (this.p2.x - this.p1.x);
+		let Iy = this.p1.y + t * (this.p2.y - this.p1.y);
+		let hit = (W == 0 ? false : (u < 0 ? false : (u > 1 ? false : (t < 0 ? false : (t > 1 ? false : true)))));
+		return {hit: hit, x: Ix, y: Iy, t: t, u: u};
+	}
+
+	hasPoint(p) {
+		if (this.p1.equals(p) || this.p2.equals(p)) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+}
+
+function pointKey(p) {
+    return `${p.x},${p.y}`;
+}
+
+function segmentsToTrianglePoints(s1, s2, s3) { // assuming they make a valid triangle
+	const segments = [s1, s2, s3];
+
+    // Collect unique points
+    const points = new Map();
+
+    for (const s of segments) {
+        points.set(pointKey(s.p1), s.p1);
+        points.set(pointKey(s.p2), s.p2);
+    }
+
+    return [...points.values()];
+}
+
+function segmentsFormTriangle(s1, s2, s3) {
+    const segments = [s1, s2, s3];
+
+    // Collect unique points
+    const points = new Map();
+
+    for (const s of segments) {
+        points.set(pointKey(s.p1), s.p1);
+        points.set(pointKey(s.p2), s.p2);
+    }
+
+    // A triangle must have exactly 3 unique vertices
+    if (points.size !== 3) {
+        return false;
+    }
+
+    // Count how many segment endpoints touch each vertex
+    const degree = {};
+
+    for (const key of points.keys()) {
+        degree[key] = 0;
+    }
+
+    for (const s of segments) {
+        degree[pointKey(s.p1)]++;
+        degree[pointKey(s.p2)]++;
+    }
+
+    // Every vertex must belong to exactly 2 segments
+    if (!Object.values(degree).every(d => d === 2)) {
+        return false;
+    }
+
+    // Check that the three points are not collinear
+    const [A, B, C] = [...points.values()];
+
+    const area2 =
+        (B.x - A.x) * (C.y - A.y) -
+        (B.y - A.y) * (C.x - A.x);
+
+    return area2 !== 0;
+}
+
+function pointsFormTriangle(p1, p2, p3) {
+	let s1 = new Segment(p1, p2);
+	let s2 = new Segment(p2, p3);
+	let s3 = new Segment(p3, p1);
+	return segmentsFormTriangle(s1, s2, s3);
+}
+
+function trianglesToUniqueSegments(tris) {
+	const segments = [];
+
+    for (const tri of tris) {
+        for (const seg of tri.getSegments()) {
+            if (!segments.some(s => s.equals(seg))) {
+                segments.push(seg);
+            }
+        }
+    }
+
+    return segments;
+}
+
+class Triangle {
+	constructor(p1,p2,p3) {
+		this.p1 = p1;
+		this.p2 = p2;
+		this.p3 = p3;
+	}
+
+	getSegments() {
+		return [
+			new Segment(this.p1, this.p2),
+			new Segment(this.p2, this.p3),
+			new Segment(this.p3, this.p1)
+		];
+	}
+
+	getPoints() {
+		return [this.p1, this.p2, this.p3];
+	}
+
+	hasPoint(p) {
+		if (this.p1.x == p.x && this.p1.y == p.y) {
+			return true;
+		} else if (this.p2.x == p.x && this.p2.y == p.y) {
+			return true;
+		} else if (this.p3.x == p.x && this.p3.y == p.y) {
+			return true;
+		} else {
+			return false
+		}
+	}
+
+	getCircle() {
+		if (this.circ == null) this.circ = circumCircle(this.p1, this.p2, this.p3);
+		return this.circ;
+	}
+
+	pointInCirc(p) { // or on edge
+		// return (p.x - circ.x)**2 + (p.y - circ.y)**2 <= circ.r**2;
+
+		let a = this.p1;
+		let b = this.p2;
+		let c = this.p3;
+		let d = p;
+
+		// absolute coordinates
+		// const az = a.x * a.x + a.y * a.y;
+		// const bz = b.x * b.x + b.y * b.y;
+		// const cz = c.x * c.x + c.y * c.y;
+		// const dz = d.x * d.x + d.y * d.y;
+		// const det =
+		//     a.x * (b.y * (cz - dz) + c.y * (dz - bz) + d.y * (bz - cz))
+		//   - b.x * (a.y * (cz - dz) + c.y * (dz - az) + d.y * (az - cz))
+		//   + c.x * (a.y * (bz - dz) + b.y * (dz - az) + d.y * (az - bz))
+		//   - d.x * (a.y * (bz - cz) + b.y * (cz - az) + c.y * (az - bz));
+
+		// translated to center at (0,0)
+		const ax = a.x - d.x;
+	    const ay = a.y - d.y;
+	    const bx = b.x - d.x;
+	    const by = b.y - d.y;
+	    const cx = c.x - d.x;
+	    const cy = c.y - d.y;
+		const det =
+        (ax * ax + ay * ay) * (bx * cy - by * cx) -
+        (bx * bx + by * by) * (ax * cy - ay * cx) +
+        (cx * cx + cy * cy) * (ax * by - ay * bx);
+
+		const orient =
+		    (b.x - a.x) * (c.y - a.y) -
+		    (b.y - a.y) * (c.x - a.x);
+
+		// if (orient > 0) {
+		//     // a -> b -> c is counterclockwise (CCW)
+		//     if (det > 0) {
+		// 	    // inside circumcircle
+		// 	    return true;
+		// 	} else if (det < 0) {
+		// 	    // outside
+		// 	    return false;
+		// 	} else {
+		// 	    // exactly on the circumcircle
+		// 	    return true;
+		// 	}
+		// } else if (orient < 0) {
+		//     // a -> b -> c is clockwise (CW)
+		//     // reverse sign if clockwise
+		// 	if (det < 0) {
+		// 	    // inside circumcircle
+		// 	    return true;
+		// 	} else if (det > 0) {
+		// 	    // outside
+		// 	    return false;
+		// 	} else {
+		// 	    // exactly on the circumcircle
+		// 	    return true;
+		// 	}
+		// } else {
+		//     // collinear (no unique circumcircle)
+		// 	return false;
+		// }
+
+		if (orient == 0) return false;
+		const EPS = 1e-12; // accounting for floating point imprecision
+		return (orient > 0) ? (det >= -EPS) : (det <= +EPS);
+	}
+
+	pointInTriangle(p) {
+		let det = (this.p2.y - this.p3.y) * (this.p1.x - this.p3.x) + (this.p3.x - this.p2.x) * (this.p1.y - this.p3.y);
+		if (det == 0) return false; // or true, idk just avoid error
+		
+		let u = (this.p2.y - this.p3.y) * (p.x - this.p3.x) + (this.p3.x - this.p2.x) * (p.y - this.p3.y);
+		u = u / det;
+		
+		let v = (this.p3.y - this.p1.y) * (p.x - this.p3.x) + (this.p1.x - this.p3.x) * (p.y - this.p3.y);
+		v = v / det;
+
+		let w = 1 - u - v;
+
+		return (u >= 0 && v >= 0 && w >= 0);
+	}
+}
+
+function bowyer_watson_SUPERTRIANGLE(pl, M = 10) {
+	let x_min = 1000000;
+	let y_min = 1000000;
+	let x_max = -1000000;
+	let y_max = -1000000;
+
+	for (let i = 0; i < pl.length; i++) {
+		if (x_min > pl[i].x) x_min = pl[i].x;
+		if (y_min > pl[i].y) y_min = pl[i].y;
+		if (x_max < pl[i].x) x_max = pl[i].x;
+		if (y_max < pl[i].y) y_max = pl[i].y;
+	}
+
+	let dx = x_max - x_min;
+	let dy = y_max - y_min;
+	let d_max = (dx > dy ? dx : dy);
+
+	let x_mid = (x_max + x_min) * 0.5;
+	let y_mid = (y_max + y_min) * 0.5;
+
+	let v1_x = x_mid;
+	let v1_y = y_max + M*d_max;
+
+	let v2_x = x_min - M*d_max;
+	let v2_y = y_min - M*d_max;
+
+	let v3_x = x_max + M*d_max;
+	let v3_y = y_min - M*d_max;
+
+	return new Triangle(new Point(v1_x, v1_y), new Point(v2_x, v2_y), new Point(v3_x, v3_y));
+}
+
+function addBoundaryEdge(boundary, edge) {
+    const index = boundary.findIndex(e => e.equals(edge));
+
+    if (index === -1) {
+        boundary.push(edge);
+    } else {
+        // Shared by two triangles, so remove it.
+        boundary.splice(index, 1);
+    }
+}
+
+// Delaunay triangulation Bowyer–Watson
+function bowyer_watson(pl) { // [{x:0,y:0}] / [Point()]
+	// 1. Start with a large "super triangle."
+	let superTriangle = bowyer_watson_SUPERTRIANGLE(pl);
+	let tris = [superTriangle]; // list of triangles
+
+	for (let i = 0; i < pl.length; i++) {
+		// Insert one point at a time.
+		let pt = pl[i]; // point_temp
+
+		// Remove every triangle whose circumcircle contains the new point.
+		let temp_tris = [];
+		let removedSegments = [];
+		for (let j = 0; j < tris.length; j++) {
+			if (!tris[j].pointInCirc(pt)) { // check if current point is in the current triangle's circumcircle (CmC)
+				temp_tris.push(tris[j]); // nothing changed
+
+			} else {
+				// don't add the same segment to removedSegments twice (inccorrect)
+				// if a segment appears twice, don't add it at all
+				let [temp_s1, temp_s2, temp_s3] = tris[j].getSegments();
+				addBoundaryEdge(removedSegments, temp_s1);
+				addBoundaryEdge(removedSegments, temp_s2);
+				addBoundaryEdge(removedSegments, temp_s3);
+			}
+		}
+		
+		tris = temp_tris; // triangle list without the triangles that have the point in their CmC
+
+		// The boundary of the removed region forms a polygon.
+		// Connect the new point to each boundary edge.
+		for (let j = 0; j < removedSegments.length; j++) {
+			// if (segmentsFormTriangle(removedSegments[j+0], removedSegments[j+1], pt)) {
+			// 	let [t_p1,t_p2,t_p3] = segmentsToTrianglePoints(removedSegments[j+0], removedSegments[j+1], pt);
+			// 	tris.push(new Triangle(t_p1, t_p2, t_p3));
+			// }
+
+			tris.push(new Triangle(removedSegments[j].p1, removedSegments[j].p2, pt));	
+		}
+	}
+
+	// Remove triangles connected to the super triangle at the end.
+	let temp_tris = [];
+	let pl1 = superTriangle.getPoints();
+	for (let i = 0; i < tris.length; i++) {
+
+		let pl2 = tris[i].getPoints();
+		let keepBool = true;
+		for (const p1 of pl1) {
+			for (const p2 of pl2) {
+				if (p1.equals(p2)) {
+					keepBool = false;
+					break;
+				}
+			}
+			if (!keepBool) break;
+		}
+		if (keepBool) temp_tris.push(tris[i]); // nothing changed
+	}
+	tris = temp_tris; // triangle list without the triangles that have the point in their CmC
+
+	return tris;
+} // return array of Triangles
+
+class UnionFind { // also called disjoint set union
+  constructor(n) {
+    this.parent = Array.from({ length: n }, (_, i) => i); // where does vertex i point (who is its parent)
+    this.rank = Array(n).fill(0); // sub-tree length  (try to keep smaller ones at the end)
+  }
+
+  find(x) { // where does x point  (which parent)
+    if (this.parent[x] !== x) {
+      this.parent[x] = this.find(this.parent[x]); // Path compression (3 -> 2 -> 1) => (3 -> 1)
+    }
+    return this.parent[x];
+  }
+
+  union(a, b) { // are these two vertices already connected?
+    let rootA = this.find(a);
+    let rootB = this.find(b);
+
+    // does the vertex ultimately link back to the same parent vertex
+    if (rootA === rootB) return false; // Yes, it does. You can't add the segment, as it will form a loop.
+
+    // make sure the shorter tree is last
+    if (this.rank[rootA] < this.rank[rootB]) {
+      [rootA, rootB] = [rootB, rootA];
+    }
+
+    this.parent[rootB] = rootA;
+
+    if (this.rank[rootA] === this.rank[rootB]) {
+      this.rank[rootA]++;
+    }
+
+    return true; // Yes, you can add the segment. There will bo no loops.
+  }
+}
+
+// minimum spanning tree Kruskal's Algorithm
+function kruskal(bwsIn) { // pass in bowyer_watson after applying trianglesToUniqueSegments
+	// sort segments based on length
+	// let bw = bwsIn.toSorted((a, b) => (a.length - b.length)); // a - b = 1234;  b - a = 4321
+	let bw = bwsIn;
+	let edgeVertices = Array.from({length:bw.length}, ()=>({u: -1, v: -1, w: -1}));
+	let kruskal_mst = [];
+
+	// get the vertices  (vertices.length = number of nodes)
+	let vertices = new Set();
+	for (const { p1, p2 } of bw) {
+	  vertices.add(pointKey(p1));
+	  vertices.add(pointKey(p2));
+	}
+	vertices = [...vertices];
+	const N = vertices.length;
+
+	for (let i = 0; i < bw.length; i++) {
+		edgeVertices[i].u = vertices.indexOf(pointKey(bw[i].p1));
+		edgeVertices[i].v = vertices.indexOf(pointKey(bw[i].p2));
+		edgeVertices[i].w = bw[i].length;
+	}
+
+	// // code to find each segment's connections 
+	// let connections = Array.from({length:bwIn.length}, ()=>[[], []]);
+	// for (let i = 0; i < bw.length; i++) {
+	// 	// get all connections (segment end to end)
+	// 	for (let j = 0; j < bw.length; j++) {
+	// 		if (i == j) continue;
+	// 		if (bw[i].p1.equals(bw[j].p1) || bw[i].p1.equals(bw[j].p2)) {
+	// 			connections[i][0].push(j);
+	// 		} else if (bw[i].p2.equals(bw[j].p1) || bw[i].p2.equals(bw[j].p2)) {
+	// 			connections[i][1].push(j);
+	// 		}
+	// 	}
+	// }
+
+	let uf = new UnionFind(N);
+	for (let i = 0; i < bw.length; i++) {
+		if (uf.union(edgeVertices[i].u, edgeVertices[i].v)) {
+			kruskal_mst.push(bw[i]);
+
+			if (kruskal_mst.length == N - 1) break;
+		}
+	}
+	
+	return kruskal_mst;
+} // return array of Segments
+
+function mst(bwsIn) {
+	return kruskal(bwsIn.toSorted((a, b) => (a.length - b.length))); // a - b = 1234;  b - a = 4321
+	// return kruskal(bwsIn.toSorted((a, b) => (b.length - a.length))); // max-spanning tree
+	// return kruskal(shuffleArray(bwsIn, true)); // random tree w/o loops
+}
+
+function voronoi(bwtIn) { // pass in bawyer-watson before applying trianglesToUniqueSegments
+	let points = new Map(); // Map to get unique points
+	let circles = [];
+    for (const t of bwtIn) {
+        points.set(pointKey(t.p1), t.p1);
+        points.set(pointKey(t.p2), t.p2);
+        points.set(pointKey(t.p3), t.p3);
+    	circles.push(t.getCircle()); // get circle
+    }
+    points = [...points.values()]; // Map to array
+
+    let result = [];
+
+    for (let i = 0; i < points.length; i++) {
+    	let pt = points[i];
+
+    	// get all triangles with p in their circles
+    	let temp_trianglesI = [];
+    	for (let j = 0; j < bwtIn.length; j++) {
+    		if (bwtIn[j].pointInCirc(pt)) {
+    			temp_trianglesI.push(j);
+    		}
+    	}
+
+    	// sort around p by angle
+    	temp_trianglesI.sort((a,b)=>{
+    		let x1 = circles[a].x;
+    		let y1 = circles[a].y;
+    		let t1 = Math.atan2(y1 - pt.y, x1 - pt.x);
+
+    		let x2 = circles[b].x;
+    		let y2 = circles[b].y;
+    		let t2 = Math.atan2(y2 - pt.y, x2 - pt.x);
+
+    		return t1 - t2;
+    	});
+
+    	let tval = temp_trianglesI.map((v) => {
+    		return {x: circles[v].x, y: circles[v].y};
+    	});
+    	result.push(tval);
+    }
+    return result;
+}
+
+
+function polygonMean(pl) {
+	let n = pl.length - 1;
+	let cx = 0;
+	let cy = 0;
+	for (let i = 0; i <= n; i++) {
+		cx += pl[i].x;
+		cy += pl[i].y;
+	}
+	cx /= n;
+	cy /= n;
+	return {x: cx, y: cy};
+}
+
+function orderPolygon(pl) {
+	let {cx, cy} = polygonMean(pl);
+	let n = pl.length - 1;
+	let t = [];
+	for (let i = 0; i <= n; i++) {
+		t.push(Math.atan2(pl[i].y - cy, pl[i].x - cx)); // angle relative to "center"
+	}
+
+	return pl.toSorted((a,b) => {
+		let i1 = pl.findIndex((p) => p.equals(a));
+		let i2 = pl.findIndex((p) => p.equals(b));
+		return t[i1] - t[i2];
+	}); // sort based on angle
+}
+
+function polygonArea(pl) { // [Point()]
+	let n = pl.length - 1;
+	let sum = 0;
+	let j, k;
+	for (let i = 0; i <= n; i++) {
+		j = parseInt(mod(i + 0, n).toFixed(2));
+		k = parseInt(mod(i + 1, n).toFixed(2));
+		sum += (pl[j].x * pl[k].y - pl[k].x * pl[j].y);
+	}
+	sum /= 2;
+	return sum;
+}
+
+function polygonCentroid(pl) {
+	let n = pl.length - 1;
+	let cx = 0;
+	let cy = 0;
+	let j, k;
+	for (let i = 0; i <= n; i++) {
+		j = parseInt(mod(i + 0, n).toFixed(2));
+		k = parseInt(mod(i + 1, n).toFixed(2));
+		cx += (pl[j].x + pl[k].x) * (pl[j].x * pl[k].y - pl[k].x * pl[j].y);
+		cy += (pl[j].y + pl[k].y) * (pl[j].x * pl[k].y - pl[k].x * pl[j].y);
+	}
+	let a = polygonArea(pl);
+	a *= 6;
+	cx /= a;
+	cy /= a;
+	return {x: cx, y: cy};
+}
+
+
+// THIS WAS COPIED FROM AI
+// RADIX-2 FFT
+function transform(real, imag, inverse = false) {
+    const N = real.length;
+
+    if ((N & (N - 1)) !== 0) {
+        throw new Error("Length must be a power of 2");
+    }
+
+    // Bit-reversal permutation
+    let j = 0;
+    for (let i = 1; i < N; i++) {
+        let bit = N >> 1;
+        while (j & bit) {
+            j ^= bit;
+            bit >>= 1;
+        }
+        j ^= bit;
+
+        if (i < j) {
+            [real[i], real[j]] = [real[j], real[i]];
+            [imag[i], imag[j]] = [imag[j], imag[i]];
+        }
+    }
+
+    // FFT / IFFT
+    for (let len = 2; len <= N; len <<= 1) {
+        const half = len >> 1;
+        const ang = (inverse ? 2 : -2) * Math.PI / len;
+
+        const wlen_r = Math.cos(ang);
+        const wlen_i = Math.sin(ang);
+
+        for (let i = 0; i < N; i += len) {
+            let w_r = 1;
+            let w_i = 0;
+
+            for (let j = 0; j < half; j++) {
+                const even = i + j;
+                const odd = even + half;
+
+                const u_r = real[even];
+                const u_i = imag[even];
+
+                const t_r = real[odd] * w_r - imag[odd] * w_i;
+                const t_i = real[odd] * w_i + imag[odd] * w_r;
+
+                real[even] = u_r + t_r;
+                imag[even] = u_i + t_i;
+
+                real[odd] = u_r - t_r;
+                imag[odd] = u_i - t_i;
+
+                const next_w_r = w_r * wlen_r - w_i * wlen_i;
+                w_i = w_r * wlen_i + w_i * wlen_r;
+                w_r = next_w_r;
+            }
+        }
+    }
+
+    // Normalize only for IFFT
+    if (inverse) {
+        for (let i = 0; i < N; i++) {
+            real[i] /= N;
+            imag[i] /= N;
+        }
+    }
+}
+
+function bluesteinFFT(real, imag) {
+    const N = real.length;
+
+    // Find convolution size (next power of two)
+    let M = 1;
+    while (M < 2 * N - 1) {
+        M <<= 1;
+    }
+
+    // Chirp arrays
+    const ar = new Array(M).fill(0);
+    const ai = new Array(M).fill(0);
+
+    const br = new Array(M).fill(0);
+    const bi = new Array(M).fill(0);
+
+    for (let k = 0; k < N; k++) {
+        const angle = Math.PI * k * k / N;
+
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        // x[k] * exp(-i*pi*k^2/N)
+        ar[k] = real[k] * cos + imag[k] * sin;
+        ai[k] = imag[k] * cos - real[k] * sin;
+
+        // exp(+i*pi*k^2/N)
+        br[k] = cos;
+        bi[k] = sin;
+
+        if (k !== 0) {
+            br[M - k] = cos;
+            bi[M - k] = sin;
+        }
+    }
+
+
+    // FFT(a)
+    transform(ar, ai, false);
+
+    // FFT(b)
+    transform(br, bi, false);
+
+
+    // Multiply in frequency domain
+    for (let i = 0; i < M; i++) {
+        const r = ar[i] * br[i] - ai[i] * bi[i];
+        const im = ar[i] * bi[i] + ai[i] * br[i];
+
+        ar[i] = r;
+        ai[i] = im;
+    }
+
+
+    // Inverse FFT
+    transform(ar, ai, true);
+
+
+    // Final chirp multiplication
+    const outR = new Array(N);
+    const outI = new Array(N);
+
+    for (let k = 0; k < N; k++) {
+
+        const angle = Math.PI * k * k / N;
+
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        outR[k] =
+            ar[k] * cos +
+            ai[k] * sin;
+
+        outI[k] =
+            ai[k] * cos -
+            ar[k] * sin;
+    }
+
+
+    return {
+        real: outR,
+        imag: outI
+    };
+}
+
+function bluesteinIFFT(real, imag) {
+    const N = real.length;
+
+    // conjugate
+    for (let i = 0; i < N; i++) {
+        imag[i] = -imag[i];
+    }
+
+    const result = bluesteinFFT(real, imag);
+
+    // conjugate and scale
+    for (let i = 0; i < N; i++) {
+        real[i] = result.real[i] / N;
+        imag[i] = -result.imag[i] / N;
+    }
+}
+
+function fft(real, imag) {
+	/*
+	after fft, this is the frequency component:
+ 		real[k] + i*imag[k]
+	amplitude:
+ 		const amplitude = Math.sqrt(real[k] * real[k] + imag[k] * imag[k]);
+	phase:
+		const phase = Math.atan2(imag[k], real[k]);
+	-----------------------------------------------
+		const frequencies = real.map((r, i) => ({
+		    index: i,
+		    magnitude: Math.sqrt(
+		        r*r + imag[i]*imag[i]
+		    ),
+		    r,
+		    i: imag[i]
+		}));
+	*/
+
+    bluesteinFFT(real, imag);
+}
+
+function ifft(real, imag) {
+	/*
+	const result = bluesteinFFT(real, imag);
+
+	const coeffs = [];
+
+	for (let i = 0; i < result.real.length; i++) {
+	    const r = result.real[i];
+	    const im = result.imag[i];
+
+	    coeffs.push({
+	        re: r,
+	        im: im,
+	        freq: i,
+	        amp: Math.hypot(r, im),
+	        phase: Math.atan2(im, r)
+	    });
+	}
+
+	coeffs.sort((a, b) => b.amp - a.amp);
+	const used = coeffs.slice(0, 50);
+
+	radius: c.amp
+	angle: 2PI * t * c.freq + c.phase
+	x: radius * cos(angle)
+	y: radius * sin(angle)
+	*/
+    bluesteinIFFT(real, imag);
+}
+
+function getFrequency(k, N) {
+	/*
+	FFT outputs frequencies like:
+		0,1,2,3,...,N-1
+	but the upper half represents negative frequencies:
+		0,1,2,3,...,N/2,-N/2+1,...,-3,-2,-1
+	*/
+    return k <= N/2 ? k : k - N;
+}
+
+function drawEpicycles(t, coeffs, ctx) {
+
+    let x = 0;
+    let y = 0;
+
+    ctx.beginPath();
+
+    for (const c of coeffs) {
+
+        const prevX = x;
+        const prevY = y;
+
+        const radius = c.amp;
+        const angle =
+            2 * Math.PI * c.freq * t +
+            c.phase;
+
+        x += radius * Math.cos(angle);
+        y += radius * Math.sin(angle);
+
+
+        // draw circle
+        ctx.strokeStyle = "#555";
+        ctx.beginPath();
+        ctx.arc(
+            prevX,
+            prevY,
+            radius,
+            0,
+            Math.PI * 2
+        );
+        ctx.stroke();
+
+
+        // draw arm
+        ctx.strokeStyle = "#999";
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    }
+
+    return new Point(x, y);
+}
+
+
+/**
+ * Calculates the perpendicular squared distance from a point to a line segment.
+ */
+function getSquareSegmentDistance(p, p1, p2) {
+    let x = p1.x;
+    let y = p1.y;
+    let dx = p2.x - x;
+    let dy = p2.y - y;
+
+    if (dx !== 0 || dy !== 0) {
+        const t = ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy);
+
+        if (t > 1) {
+            x = p2.x;
+            y = p2.y;
+        } else if (t > 0) {
+            x += dx * t;
+            y += dy * t;
+        }
+    }
+
+    dx = p.x - x;
+    dy = p.y - y;
+
+    return dx * dx + dy * dy;
+}
+
+/**
+ * Simplifies a polyline using the Ramer-Douglas-Peucker algorithm.
+ * @param {Array<Point>} points - Array of points.
+ * @param {number} epsilon - Distance threshold for simplification.
+ * @returns {Array<Point>} Simplified array of points.
+ */
+function simplifyRDP(points, epsilon) {
+    if (points.length <= 2) return points;
+
+    const sqEpsilon = epsilon * epsilon;
+    const lastIdx = points.length - 1;
+    let maxSqDist = 0;
+    let index = 0;
+
+    // Find the point with the maximum distance
+    for (let i = 1; i < lastIdx; i++) {
+        const sqDist = getSquareSegmentDistance(points[i], points[0], points[lastIdx]);
+        if (sqDist > maxSqDist) {
+            index = i;
+            maxSqDist = sqDist;
+        }
+    }
+
+    // If max distance is greater than epsilon, recursively simplify
+    if (maxSqDist > sqEpsilon) {
+        const results1 = simplifyRDP(points.slice(0, index + 1), epsilon);
+        const results2 = simplifyRDP(points.slice(index), epsilon);
+
+        // Concatenate results, dropping the duplicate middle point
+        return results1.slice(0, results1.length - 1).concat(results2);
+    }
+
+    // Otherwise, return the endpoints
+    return [points[0], points[lastIdx]];
+}
+
+
+function resampleToEqualSpacing(points, spacing) {
+	let n = points.length - 1;
+	let n2 = 10*n;
+	let n3 = 1 / n2;
+
+	let res = [points[0]];
+
+	for (let j = 0; j < n; j+=n3) {
+		let i = parseInt(floor(j));
+		let l = fract(j);
+
+		let x = lerp(points[i].x, points[i+1].x, l);
+		let y = lerp(points[i].y, points[i+1].y, l);
+		let d = Math.sqrt((res[res.length-1].x - x)**2 + (res[res.length-1].y - y)**2);
+
+		if (d >= spacing) {
+			res.push(new Point(x, y));
+		}
+	}
+	return res;
+}
+
+class Stroke {
+	constructor() {
+		this.raw = [];
+		this.simple = [];
+		this.resampled = [];
+		this.tangent = [];
+		this.curvature = [];
+		this.selfIntersections = [];
+	}
+
+	process() {
+		// simplify the drawn points
+		this.simple = simplifyRDP(this.raw, 5);
+
+		// resample so that they're equaly spaced
+		this.resampled = resampleToEqualSpacing(this.simple, 20);
+
+		// compute the tangents
+		this.tangent = [];
+		let distTrav = [];
+		const lookAheadValue = 1;
+		for (let i = 0; i < this.resampled.length; i++) {
+			let prev = this.resampled[Math.max(0, i - lookAheadValue)];
+			// let curr = this.resampled[i]; // you can look further ahead if you want
+			let next = this.resampled[Math.min(this.resampled.length - 1, i + lookAheadValue)];
+
+			let dx = next.x - prev.x;
+			let dy = next.y - prev.y;
+			let dz = Math.sqrt(dx*dx + dy*dy);
+			distTrav.push(dz);
+			this.tangent.push(new Point(dx / dz, dy / dz)); // the normal is simply (-dy, dx)
+		}
+
+		// compute the curvatures
+		this.curvature = [];
+		for (let i = 0; i < this.resampled.length; i++) {
+			let prev = this.tangent[Math.max(0, i - lookAheadValue)];
+			prev = prev.y / (prev.x + 1e-11);
+			let next = this.tangent[Math.min(this.resampled.length - 1, i + lookAheadValue)];
+			next = next.y / (next.x + 1e-11);
+
+			let dt = next - prev; // delta tangent
+			this.curvature.push(dt / (distTrav[i] + 1e-11)); // here epsilon isn't needed, but why not
+		}
+
+		// compute self intersections
+		this.selfIntersections = [];
+		let tempSegs = [];
+		for (let i = 0; i < this.resampled.length - 1; i++) { // using raw is out of the question; simple would be nice, but the slow corners might cause trouble with their short segments; therefore, I'll use resampled (might be slower than simple)
+			tempSegs.push(new Segment(this.resampled[i+0], this.resampled[i+1]));
+		}
+		for (let i = 0; i < tempSegs.length; i++) {
+			let currentSegment = tempSegs[i];
+
+			for (let j = i+2; j < tempSegs.length; j++) {
+				if (j != i && (j < i-1 || j > i+1)) {
+					let otherSegment = tempSegs[j];
+					let intersection = currentSegment.intersect(otherSegment);
+					if (intersection.hit) {
+						this.selfIntersections.push(new Point(intersection.x, intersection.y));
+					}
+				}
+			}
+		}
+	}
+}
+
+
+
+class GameArea {
+	constructor() {
+		this.canvas = document.createElement("canvas");
+		this.resizeCanvasFunction = this.resizeCanvasFunction.bind(this); // or wrap the callback (on resize) in an arrow function
+	}
+
+	resizeCanvasFunction() {
+		// 16:9
+		if (window.innerWidth >= window.innerHeight) {
+			this.canvas.width = 2048; // 2**11
+			this.canvas.height = 1152; // 2**10+2**7
+		} else {
+			this.canvas.width = 1152;
+			this.canvas.height = 2048;
+		}
+
+		let canvasAspect = this.canvas.width / this.canvas.height;
+		let viewPortAspect = window.innerWidth / window.innerHeight;
+
+		if (viewPortAspect > canvasAspect) {
+			this.canvas.style.width = "auto";
+			this.canvas.style.height = "100vh";
+
+			let w = window.innerHeight * canvasAspect;
+			let w2 = Math.max(0, (document.documentElement.clientWidth - w)*0.5);
+			this.canvas.style.margin = "0px";
+			this.canvas.style.marginLeft = `${w2}px`;
+			this.canvas.style.marginRight = `${w2}px`;
+		} else {
+			this.canvas.style.width = "100vw";
+			this.canvas.style.height = "auto";
+
+			let h = window.innerWidth / canvasAspect;
+			let h2 = Math.max(0, (document.documentElement.clientHeight - h)*0.5);
+			this.canvas.style.margin = "0px";
+			this.canvas.style.marginTop = `${h2}px`;
+			this.canvas.style.marginBottom = `${h2}px`;
+		}
+	}
+
+	start() {
+		this.canvas.style.background = "#222";
+		this.canvas.style.padding = "0px";
+		this.canvas.style.margin = "0px";
+
+		this.resizeCanvasFunction();
+		window.addEventListener("resize", this.resizeCanvasFunction);
+
+		if (document.body.childNodes.length >= 1) { // make sure the canvas is the first thing you see
+			document.body.insertBefore(this.canvas, document.body.childNodes[0]);
+		} else {
+			document.body.appendChild(this.canvas);
+		}
+
+		this.ctx = this.canvas.getContext("2d");
+		this.ctx.width = this.canvas.width;
+		this.ctx.height = this.canvas.height;
+	}
+}
+
+
+class InputManager {
+    constructor() {
+        this.keysDown = new Set();
+        this.keysPressed = new Set();
+        this.keysReleased = new Set();
+
+        this.mouse = {
+            x: 0,
+            y: 0,
+            mx: 0,
+            my: 0,
+            buttonsDown: new Set(),
+            buttonsPressed: new Set(),
+            buttonsReleased: new Set()
+        };
+
+        this.touches = new Map(); // active touches
+		this.touchPressed = new Set();
+		this.touchReleased = new Set();
+        
+        this.lastTouchReleaseXY = {x: -1, y: -1};
+        this.lastMouseReleaseXY = {x: -1, y: -1};
+
+		this.swipe = {
+		    active: false,
+		    startX: 0,
+		    startY: 0,
+		    x: 0,
+		    y: 0
+		};
+
+        this._bindEvents();
+    }
+
+    _bindEvents() {
+        // Keyboard
+        window.addEventListener("keydown", (e) => {
+            if (!this.keysDown.has(e.code)) {
+                this.keysPressed.add(e.code);
+            }
+            this.keysDown.add(e.code);
+        });
+
+        window.addEventListener("keyup", (e) => {
+            this.keysDown.delete(e.code);
+            this.keysReleased.add(e.code);
+        });
+
+        // Mouse move
+        window.addEventListener("mousemove", (e) => {
+            this.mouse.x = e.clientX;
+            this.mouse.y = e.clientY;
+
+            this.swipe.x = e.clientX;
+		    this.swipe.y = e.clientY;
+        });
+
+        // Mouse down
+        window.addEventListener("mousedown", (e) => {
+            if (!this.mouse.buttonsDown.has(e.button)) {
+                this.mouse.buttonsPressed.add(e.button);
+            }
+            this.mouse.buttonsDown.add(e.button);
+
+            if (!this.swipe.active) {
+	            this.swipe.active = true;
+	            this.swipe.startX = e.clientX;
+	            this.swipe.startY = e.clientY;
+	        }
+        });
+
+        // Mouse up
+        window.addEventListener("mouseup", (e) => {
+            this.mouse.buttonsDown.delete(e.button);
+            this.mouse.buttonsReleased.add(e.button);
+            this.lastMouseReleaseXY.x = e.clientX;
+            this.lastMouseReleaseXY.y = e.clientY;
+
+            this.swipe.active = false;
+        });
+
+        // TOUCH START
+		window.addEventListener("touchstart", (e) => {
+		    for (const t of e.changedTouches) {
+		        this.touches.set(t.identifier, {
+		            x: t.clientX,
+		            y: t.clientY
+		        });
+
+		        this.touchPressed.add(t.identifier);
+
+		        // swipe start (first finger only)
+		        if (!this.swipe.active) {
+		            this.swipe.active = true;
+		            this.swipe.startX = t.clientX;
+		            this.swipe.startY = t.clientY;
+		        }
+		    }
+		});
+
+		// TOUCH MOVE
+		window.addEventListener("touchmove", (e) => {
+		    for (const t of e.changedTouches) {
+		        if (this.touches.has(t.identifier)) {
+		            this.touches.set(t.identifier, {
+		                x: t.clientX,
+		                y: t.clientY
+		            });
+
+		            this.swipe.x = t.clientX;
+		            this.swipe.y = t.clientY;
+		        }
+		    }
+		});
+
+		// TOUCH END
+		window.addEventListener("touchend", (e) => {
+		    for (const t of e.changedTouches) {
+		        this.touches.delete(t.identifier);
+		        this.touchReleased.add(t.identifier);
+                this.lastTouchReleaseXY.x = t.clientX;
+                this.lastTouchReleaseXY.y = t.clientY;
+                // console.log(t)
+		    }
+
+		    if (this.touches.size === 0) {
+		        this.swipe.active = false;
+		    }
+		});
+
+        // Prevent stuck input when switching tabs
+        window.addEventListener("blur", () => {
+            this.keysDown.clear();
+            this.mouse.buttonsDown.clear();
+            this.touches.clear();
+            this.swipe.active = false;
+        });
+    }
+
+    // Keyboard queries
+    isKeyDown(code) {
+        return this.keysDown.has(code);
+    }
+
+    isKeyPressed(code) {
+        return this.keysPressed.has(code);
+    }
+
+    isKeyReleased(code) {
+        return this.keysReleased.has(code);
+    }
+
+    // Mouse queries
+    isMouseDown(button = 0) {
+        return this.mouse.buttonsDown.has(button);
+    }
+
+    isMousePressed(button = 0) {
+        return this.mouse.buttonsPressed.has(button);
+    }
+
+    isMouseReleased(button = 0) {
+        return this.mouse.buttonsReleased.has(button);
+    }
+
+    getPointer() {
+	    // Prefer touch if available
+	    if (this.touches.size > 0) {
+	        const first = this.touches.values().next().value;
+	        return {
+	            x: Math.round(first.x),
+	            y: Math.round(first.y),
+	            active: true,
+	            type: "touch"
+	        };
+	    }
+
+	    return {
+	        x: this.mouse.x,
+	        y: this.mouse.y,
+	        active: this.mouse.buttonsDown.size > 0,
+	        type: "mouse"
+	    };
+	}
+
+    endFrame() {
+	    // keyboard
+	    this.keysPressed.clear();
+	    this.keysReleased.clear();
+
+	    // mouse
+	    this.mouse.buttonsPressed.clear();
+	    this.mouse.buttonsReleased.clear();
+
+	    // touch
+	    this.touchPressed.clear();
+	    this.touchReleased.clear();
+	}
+}
+
+
+class Game {
+    constructor() {
+    	this.area = new GameArea();
+
+    	// the lines
+    	this.linePoints = new Array();
+    	this.linePoints.push(new Stroke());
+
+        // Timing
+        this.lastTime = 0;
+        this.accumulator = 0;
+        this.FPS = 60;
+        this.fixedDelta = 1000 / this.FPS; // 60 updates per second
+        this.maxFrameTime = 250; // 1000/(this.FPS/15)
+        this.currentUpdateFPS = this.FPS;
+        this.currentRenderFPS = this.FPS;
+
+        this.input = new InputManager();
+
+        this.start();
+    }
+
+    start() {
+    	this.area.start();
+    	this.path = [];
+
+    	// random points to show delaunay triangulation
+    	// for (let i = 0; i < 50; i++) {
+    	// 	this.linePoints[0].raw.push(new Point(secureRandomFloat()*this.area.ctx.width, secureRandomFloat()*this.area.ctx.height));
+    	// }
+
+    	// let w = 20;
+    	// let h = parseInt(this.area.ctx.height / this.area.ctx.width * w);
+    	// for (let i = 0; i < w; i++) {
+    	// 	for (let j = 0; j < h; j++) {
+    	// 		let x = (((i+0.5) / w) * this.area.ctx.width);
+    	// 		let y = (((j+0.5) / h) * this.area.ctx.height);
+    	// 		x += (1 / w) * this.area.ctx.width * secureRandomFloat() * 0.5;
+    	// 		y += (1 / h) * this.area.ctx.height * secureRandomFloat() * 0.5;
+    	// 		this.linePoints[0].raw.push(new Point(x, y));
+    	// 	}
+    	// }
+    	// this.linePoints[0].process();
+    	// this.linePoints.push(new Stroke());
+
+        this.loop = this.loop.bind(this);
+        requestAnimationFrame(this.loop);
+    }
+
+    resetBoard() {
+
+    }
+
+    loop(timestamp) {
+        if (!this.lastTime) this.lastTime = timestamp;
+
+        let frameTime = timestamp - this.lastTime;
+        this.lastTime = timestamp;
+
+        // Clamp huge frame jumps (tab freeze protection)
+        if (frameTime > this.maxFrameTime) {
+            frameTime = this.maxFrameTime;
+        }
+
+        this.accumulator += frameTime;
+
+        // Fixed update loop
+        while (this.accumulator >= this.fixedDelta) {
+            this.update(this.fixedDelta / 1000);
+            this.accumulator -= this.fixedDelta;
+        }
+
+        const alpha = this.accumulator / this.fixedDelta;
+        this.render(alpha, timestamp, frameTime);
+
+        this.input.endFrame();
+
+        requestAnimationFrame(this.loop);
+    }
+
+    update(dt) {
+    	this.currentUpdateFPS = 1 / dt;
+        
+        // if (this.input.isKeyDown("KeyW") || this.input.isKeyDown("ArrowUp")) this.player.d = 3;
+
+    	if (this.input.mouse.buttonsDown.has(0)) {
+    		let canBRect = this.area.canvas.getBoundingClientRect();
+        	this.input.mouse.mx = Math.round((this.input.getPointer().x - canBRect.left)*(this.area.ctx.width / canBRect.width))
+        	this.input.mouse.my = Math.round((this.input.getPointer().y - canBRect.top)*(this.area.ctx.height / canBRect.height))
+
+
+			let lastLineI = this.linePoints.length - 1;
+			let lastLinePointI = this.linePoints[lastLineI].raw.length - 1;
+
+			if (this.linePoints[lastLineI].raw.length > 0) {
+    			let dx = this.linePoints[lastLineI].raw[lastLinePointI].x - this.input.mouse.mx;
+    			let dy = this.linePoints[lastLineI].raw[lastLinePointI].y - this.input.mouse.my;
+    			let dh = Math.sqrt(dx * dx + dy * dy);
+
+    			if (dh > 5) { // the distance before a new point is created
+    				this.linePoints[lastLineI].raw.push(new Point(this.input.mouse.mx, this.input.mouse.my));
+    			}
+    		} else {
+    			this.linePoints[lastLineI].raw.push(new Point(this.input.mouse.mx, this.input.mouse.my));
+    		}
+    	} else if (this.input.mouse.buttonsReleased.has(0)) {
+    		this.linePoints[this.linePoints.length-1].process();
+
+    		this.linePoints.push(new Stroke());
+    	}
+    }
+
+    render(alpha, timestamp, frameTime) { // finalColor = color * alpha + background * (1 - alpha)
+        const ctx = this.area.ctx;
+        this.currentRenderFPS = 1000/frameTime;
+
+        // Clear
+        ctx.clearRect(0, 0, ctx.width, ctx.height);
+
+        // Draw Line(s)
+        ctx.fillStyle = "#D55";
+        ctx.lineWidth = 5;
+        for (let i = 0; i < this.linePoints.length; i++) {
+        	// // draw the delaunay triangulation
+        	// let tempTriangles = bowyer_watson(this.linePoints[i].resampled);
+        	// let tempSegments = trianglesToUniqueSegments(tempTriangles);
+        	// // let tempCircles = tempTriangles.map(t => t.getCircle());
+            // ctx.strokeStyle = "#999";
+        	// ctx.lineWidth = 2;
+            // for (const seg of tempSegments) {
+            // 	ctx.beginPath();
+            // 	ctx.moveTo(seg.p1.x, seg.p1.y);
+            // 	ctx.lineTo(seg.p2.x, seg.p2.y);
+            // 	ctx.stroke();
+            // }
+            
+            // // draw the minimum spanning tree after getting delaunay triangulation
+        	// let tempSegments2 = mst(tempSegments);
+        	// // let tempSegments2 = kruskal(shuffleArray(tempSegments, true));
+            // ctx.strokeStyle = "#FDF";
+        	// ctx.lineWidth = 10;
+            // for (const seg of tempSegments2) {
+            // 	ctx.beginPath();
+            // 	ctx.moveTo(seg.p1.x, seg.p1.y);
+            // 	ctx.lineTo(seg.p2.x, seg.p2.y);
+            // 	ctx.stroke();
+            // }
+
+            // // draw the voronoi cells after getting the delaunay triangulation
+        	// let voronoiPolygons = voronoi(tempTriangles);
+        	// for (let polyArr_i = 0; polyArr_i < voronoiPolygons.length; polyArr_i++) {
+        	// 	let poly = voronoiPolygons[polyArr_i];
+           	// 	ctx.fillStyle = "#"+rgbToHex(255 - parseInt(255 * hash12(polyArr_i)), 50, parseInt(255 * polyArr_i / voronoiPolygons.length))+"5F";
+
+        	// 	for (let p_i = 0; p_i < poly.length; p_i++) {
+        	// 		if (p_i == 0) {
+        	// 			ctx.beginPath();
+        	// 			ctx.moveTo(poly[p_i].x, poly[p_i].y);
+        	// 		} else if (p_i == poly.length - 1) {
+        	// 			ctx.lineTo(poly[p_i].x, poly[p_i].y);
+        	// 			ctx.fill();
+        	// 			ctx.stroke();
+        	// 		} else {
+        	// 			ctx.lineTo(poly[p_i].x, poly[p_i].y);
+        	// 		}
+        	// 	}
+        	// }
+
+            if (this.linePoints[i].resampled.length > 1) { // mean and centroid of each Stroke object
+	            let {x: cx, y: cy} = polygonMean(this.linePoints[i].resampled);
+	            let {x: cx2, y: cy2} = polygonCentroid(orderPolygon(this.linePoints[i].resampled));
+		        ctx.fillStyle = "#955";
+	            ctx.fillRect(cx - 5, cy - 5, 10, 10);
+	            ctx.fillStyle = "#595";
+	            ctx.fillRect(cx2 - 5, cy2 - 5, 10, 10);
+	        }
+        	
+
+        	// draw the drawn lines
+        	ctx.strokeStyle = "#55D";
+        	ctx.lineWidth = 5;
+        	// drawCatmullRom(ctx, this.linePoints[i]);
+        	if (this.linePoints[i].resampled.length == 0) {
+        		drawCatmullRomBezier(ctx, this.linePoints[i].raw); // built-in bezier is faster than custom
+        	} else {
+        		drawCatmullRomBezier(ctx, this.linePoints[i].resampled);
+        	}
+        	// for (let j = 0; j < this.linePoints[i].resampled.length; j++) { ctx.fillRect(this.linePoints[i].resampled[j].x - 5, this.linePoints[i].resampled[j].y - 5, 10, 10); } // draw points
+
+        	for (let j = 0; j < this.linePoints[i].selfIntersections.length; j++) {
+        		ctx.fillRect(this.linePoints[i].selfIntersections[j].x - 10, this.linePoints[i].selfIntersections[j].y - 10, 20, 20);
+        	}
+        }
+        if (this.input.mouse.buttonsDown.has(0) && this.linePoints[this.linePoints.length - 1].resampled.length > 0) {
+        	ctx.strokeStyle = "#5D5";
+        	ctx.lineWidth = 3;
+        	ctx.beginPath();
+        	ctx.moveTo(this.linePoints[this.linePoints.length - 1].resampled[this.linePoints[this.linePoints.length - 1].resampled.length - 1].x, this.linePoints[this.linePoints.length - 1].resampled[this.linePoints[this.linePoints.length - 1].resampled.length - 1].y);
+        	ctx.lineTo(this.input.mouse.mx, this.input.mouse.my);
+        	ctx.stroke();
+        }
+
+
+        // Messing with FFT
+        if (false && this.linePoints.length > 0 && this.linePoints[0].resampled.length > 1) {
+			let cx = 0;
+			let cy = 0;
+			let points = this.linePoints[0].resampled;
+
+			for (const p of points) {
+			    cx += p.x;
+			    cy += p.y;
+			}
+
+			cx /= points.length;
+			cy /= points.length;
+
+			const real = points.map(p => p.x - cx);
+			const imag = points.map(p => p.y - cy);
+
+			fft(real, imag);
+
+			const coeffs = [];
+
+			for (let i = 0; i < real.length; i++) {
+			    const r = real[i] / real.length;
+			    const im = imag[i] / real.length;
+
+			    coeffs.push({
+			        re: r,
+			        im: im,
+			        freq: getFrequency(i, real.length),
+			        amp: Math.hypot(r, im),
+			        phase: Math.atan2(im, r)
+			    });
+			}
+			coeffs.sort((a, b) => b.amp - a.amp);
+			// const used = coeffs.slice(0, 50);
+			const used = coeffs;
+
+			let result = drawEpicycles(
+	            mod(timestamp/10000,1),
+	            used,
+	            ctx
+	        );
+	        result.x += cx;
+	        result.y += cy;
+			this.path.push(result);
+			this.path = this.path.slice(-points.length+1);
+
+			ctx.strokeStyle = "white";
+		    ctx.beginPath();
+		    for (let i = 0; i < this.path.length; i++) {
+		        if (i === 0)
+		            ctx.moveTo(this.path[i].x, this.path[i].y);
+		        else
+		            ctx.lineTo(
+		                this.path[i].x,
+		                this.path[i].y
+		            );
+		    }
+		    ctx.stroke();
+		}
+
+        // Debug info
+        ctx.fillStyle = "white";
+        ctx.font = "60px monospace";
+        ctx.fillText(`R_FPS: ${this.currentRenderFPS.toFixed(0)}`, 10, 60);
+        // let canBRect = this.area.canvas.getBoundingClientRect();
+        // ctx.fillText(`Mouse: (${Math.round((this.input.getPointer().x - canBRect.left)*(ctx.width / canBRect.width))}, ${Math.round((this.input.getPointer().y - canBRect.top)*(ctx.height / canBRect.height))})`, 10, 40);
+    }
+}
+
+
+function startGame() {
+	const game = new Game();
+}
+
+startGame();
+
+</script>
+</body>
+</html>
