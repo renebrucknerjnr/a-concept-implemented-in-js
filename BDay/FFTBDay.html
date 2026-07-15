@@ -1089,14 +1089,23 @@ function getFrequency(k, N) {
     return k <= N/2 ? k : k - N;
 }
 
-function drawEpicycles(t, coeffs, ctx = null) {
-
-    let x = 0;
-    let y = 0;
-
-    if (ctx != null) {
-    	ctx.beginPath();
+function coefficientsToXY(cs, t) {
+	let x = 0;
+	let y = 0;
+	for (const c of cs) {
+		const angle = 2 * Math.PI * c.freq * t + c.phase;
+		x += c.amp * Math.cos(angle);
+		y += c.amp * Math.sin(angle); // - if drawing is upside down, otherwise keep +
     }
+    return new Point(x, y);
+}
+
+function drawEpicycles(t, coeffs, mean, ctx, base = new Point(0,0)) {
+    let x = base.x;
+    let y = base.y;
+
+    ctx.fillStyle = "#5D5";
+    ctx.fillRect(base.x - 5, base.y - 5, 10, 10);
 
     for (const c of coeffs) {
 
@@ -1113,26 +1122,24 @@ function drawEpicycles(t, coeffs, ctx = null) {
 
 
         // draw circle
-        if (ctx != null) {
-	        ctx.strokeStyle = "#555";
-	        ctx.beginPath();
-	        ctx.arc(
-	            prevX,
-	            prevY,
-	            radius,
-	            0,
-	            Math.PI * 2
-	        );
-	        ctx.stroke();
+        ctx.strokeStyle = "#555";
+        ctx.beginPath();
+        ctx.arc(
+            prevX,
+            prevY,
+            radius,
+            0,
+            Math.PI * 2
+        );
+        ctx.stroke();
 
 
-	        // draw arm
-	        ctx.strokeStyle = "#999";
-	        ctx.beginPath();
-	        ctx.moveTo(prevX, prevY);
-	        ctx.lineTo(x, y);
-	        ctx.stroke();
-	    }
+        // draw arm
+        ctx.strokeStyle = "#999";
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
     }
 
     return new Point(x, y);
@@ -1234,9 +1241,11 @@ class Stroke {
 		this.coeffs = [];
 		this.used = [];
 		this.traced = [];
+		this.mean = null;
+		this.ftRes = [];
 	}
 
-	process() {
+	process(penBase = new Point(0,0)) {
 		// this.raw.push(this.raw[0]); // copy the first point to the end for fft
 
 		// simplify the drawn points
@@ -1257,30 +1266,34 @@ class Stroke {
 
 		cx /= this.resampled.length;
 		cy /= this.resampled.length;
+		this.mean = new Point(cx, cy);
 
-		const real = this.resampled.map(p => p.x - cx);
-		const imag = this.resampled.map(p => p.y - cy);
+		// const real = this.resampled.map(p => p.x - cx);
+		// const imag = this.resampled.map(p => p.y - cy);
+		const real = this.resampled.map(p => p.x - penBase.x);
+		const imag = this.resampled.map(p => p.y - penBase.y);
 
-		let ftRes = fft(real, imag);
+		this.ftRes = fft(real, imag);
 
 		this.coeffs = [];
 
-		const invN = 1 / ftRes.real.length;
-		for (let i = 0; i < ftRes.real.length; i++) {
-		    const r = ftRes.real[i] * invN;
-		    const im = ftRes.imag[i] * invN;
+		const invN = 1 / this.ftRes.real.length;
+		for (let i = 0; i < this.ftRes.real.length; i++) {
+		    const r = this.ftRes.real[i] * invN;
+		    const im = this.ftRes.imag[i] * invN;
 
 		    this.coeffs.push({
 		        re: r,
 		        im: im,
-		        freq: getFrequency(i, ftRes.real.length),
+		        freq: getFrequency(i, this.ftRes.real.length),
 		        amp: Math.hypot(r, im),
 		        phase: Math.atan2(im, r)
 		    });
 		}
 		this.coeffs.sort((a, b) => b.amp - a.amp); // sort according to amplitude
-		// this.used = this.coeffs.slice(0, 50);
-		this.used = this.coeffs;
+		this.used = this.coeffs.slice(0, 50);
+		// this.used = this.used.toSorted((a, b) => b.freq - a.freq).slice(0, 50); // sort according to frequency
+		// this.used = this.coeffs;
 
 		this.traced = [];
 		let sampleCount = this.resampled.length; // s=(2f+1)
@@ -1290,22 +1303,22 @@ class Stroke {
 		for (let n = 0; n < sampleCount; n++) {
 			const t = n * tIncrement;
 
-			let x = 0;
-			let y = 0;
+			let x = penBase.x;
+			let y = penBase.y;
 			for (const c of this.used) {
 				const angle = 2 * Math.PI * c.freq * t + c.phase;
 				x += c.amp * Math.cos(angle);
 				y += c.amp * Math.sin(angle); // - if drawing is upside down, otherwise keep +
 		    }
 
-	        x += cx;
-	        y += cy;
+	        // x += cx;
+	        // y += cy;
+	        // x += penBase.x;
+	        // y += penBase.y;
 			this.traced.push(new Point(x, y));
-			// this.path = this.path.slice(-points.length+1);
 		}
 	}
 }
-
 
 
 class GameArea {
@@ -1576,7 +1589,11 @@ class Game {
 
     	// the lines
     	this.linePoints = new Array();
+    	this.path = new Array();
+    	this.penBase;
+
     	this.linePoints.push(new Stroke());
+    	this.path.push([]);
 
         // Timing
         this.lastTime = 0;
@@ -1594,6 +1611,7 @@ class Game {
 
     start() {
     	this.area.start();
+    	this.penBase = new Point(this.area.ctx.width / 2, this.area.ctx.height - 10);
     	this.path = [];
 
     	// random points to show delaunay triangulation
@@ -1676,10 +1694,13 @@ class Game {
     			this.linePoints[lastLineI].raw.push(new Point(this.input.mouse.mx, this.input.mouse.my));
     		}
     	} else if (this.input.mouse.buttonsReleased.has(0) || this.input.touchReleased.size > 0) {
-    		this.linePoints[this.linePoints.length-1].process();
+    		this.linePoints[this.linePoints.length-1].process(this.penBase);
 
     		this.linePoints.push(new Stroke());
+    		this.path.push([]);
+
     		while (this.linePoints.length > 2) this.linePoints.splice(0,1); // keep only one Stroke
+    		while (this.path.length > 2) this.path.splice(0,1);
     	}
     }
 
@@ -1695,7 +1716,7 @@ class Game {
         ctx.lineWidth = 5;
         for (let i = 0; i < this.linePoints.length; i++) {
         	// // draw the delaunay triangulation
-        	// let tempTriangles = bowyer_watson(this.linePoints[i].resampled);
+        	// let tempTriangles = bowyer_watson(this.linePoints[i].traced);
         	// let tempSegments = trianglesToUniqueSegments(tempTriangles);
         	// // let tempCircles = tempTriangles.map(t => t.getCircle());
             // ctx.strokeStyle = "#999";
@@ -1709,13 +1730,20 @@ class Game {
 
         	// Messing with FFT
 	        if (this.linePoints[i].traced.length > 1) {
-				// drawEpicycles(
-		        //     mod(timestamp/10000,1),
-		        //     traced,
-		        //     ctx
-		        // );
+				let p = drawEpicycles(
+		            mod(timestamp/1000 * (100/this.linePoints[i].traced.length),1),
+		            this.linePoints[i].used,
+		            this.linePoints[i].mean,
+		            ctx,
+		            this.penBase
+		        );
+		        ctx.beginPath();ctx.arc(p.x, p.y, 5, 0, 2*Math.PI);ctx.fill();
+		        this.path[i].push(p); // add to the fading path
 
-				ctx.strokeStyle = "#DEDEDE7F";
+		        this.path[i].splice(0,this.path[i].length - parseInt(this.linePoints[i].traced.length*0.2)); // make sure it stays short
+
+		        // background path
+				ctx.strokeStyle = "#CEFECE5F";
 				ctx.lineWidth = 4;
 			    ctx.beginPath();
 			    for (let j = 0; j < this.linePoints[i].traced.length; j++) {
@@ -1731,6 +1759,15 @@ class Game {
 			        // ctx.fillRect(x-5, y-5, 10, 10);
 			    }
 			    ctx.stroke();
+
+			    // fading path
+			    for (let j = 0; j < this.path[i].length-1; j++) {
+			    	ctx.strokeStyle = "#CEFE" + rgbToHex(105 + 150*(j/(this.path[i].length-1)),0,0).slice(0,2).toUpperCase();
+			    	ctx.beginPath();
+			    	ctx.moveTo(this.path[i][parseInt(mod(j+0, this.path[i].length))].x, this.path[i][parseInt(mod(j+0, this.path[i].length))].y);
+			    	ctx.lineTo(this.path[i][parseInt(mod(j+1, this.path[i].length))].x, this.path[i][parseInt(mod(j+1, this.path[i].length))].y);
+			    	ctx.stroke();
+			    }
 			}
         	
 
