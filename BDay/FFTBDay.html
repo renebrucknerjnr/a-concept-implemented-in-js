@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Tubes</title>
+	<title>Happy Birth Day FFT</title>
 	<style>
 		:root {
 			color-scheme: light only !important;
@@ -1046,7 +1046,7 @@ function fft(real, imag) {
 		    i: imag[i]
 		}));
 	*/
-    bluesteinFFT(real, imag);
+    return bluesteinFFT(real, imag);
 }
 
 function ifft(real, imag) {
@@ -1076,7 +1076,7 @@ function ifft(real, imag) {
 	x: radius * cos(angle)
 	y: radius * sin(angle)
 	*/
-    bluesteinIFFT(real, imag);
+    return bluesteinIFFT(real, imag);
 }
 
 function getFrequency(k, N) {
@@ -1230,70 +1230,23 @@ class Stroke {
 		this.raw = [];
 		this.simple = [];
 		this.resampled = [];
-		this.tangent = [];
-		this.curvature = [];
-		this.selfIntersections = [];
-		this.coeffs = []; // fft
+		
+		this.coeffs = [];
 		this.used = [];
 		this.traced = [];
 	}
 
 	process() {
+		// this.raw.push(this.raw[0]); // copy the first point to the end for fft
+
 		// simplify the drawn points
 		this.simple = simplifyRDP(this.raw, 5);
+		this.simple.push(this.simple[0]); // copy the first point to the end for fft
 
 		// resample so that they're equaly spaced
 		this.resampled = resampleToEqualSpacing(this.simple, 20);
 
-		// compute the tangents
-		this.tangent = [];
-		let distTrav = [];
-		const lookAheadValue = 1;
-		for (let i = 0; i < this.resampled.length; i++) {
-			let prev = this.resampled[Math.max(0, i - lookAheadValue)];
-			// let curr = this.resampled[i]; // you can look further ahead if you want
-			let next = this.resampled[Math.min(this.resampled.length - 1, i + lookAheadValue)];
-
-			let dx = next.x - prev.x;
-			let dy = next.y - prev.y;
-			let dz = Math.sqrt(dx*dx + dy*dy);
-			distTrav.push(dz);
-			this.tangent.push(new Point(dx / dz, dy / dz)); // the normal is simply (-dy, dx)
-		}
-
-		// compute the curvatures
-		this.curvature = [];
-		for (let i = 0; i < this.resampled.length; i++) {
-			let prev = this.tangent[Math.max(0, i - lookAheadValue)];
-			prev = prev.y / (prev.x + 1e-11);
-			let next = this.tangent[Math.min(this.resampled.length - 1, i + lookAheadValue)];
-			next = next.y / (next.x + 1e-11);
-
-			let dt = next - prev; // delta tangent
-			this.curvature.push(dt / (distTrav[i] + 1e-11)); // here epsilon isn't needed, but why not
-		}
-
-		// compute self intersections
-		this.selfIntersections = [];
-		let tempSegs = [];
-		for (let i = 0; i < this.resampled.length - 1; i++) { // using raw is out of the question; simple would be nice, but the slow corners might cause trouble with their short segments; therefore, I'll use resampled (might be slower than simple)
-			tempSegs.push(new Segment(this.resampled[i+0], this.resampled[i+1]));
-		}
-		for (let i = 0; i < tempSegs.length; i++) {
-			let currentSegment = tempSegs[i];
-
-			for (let j = i+2; j < tempSegs.length; j++) {
-				if (j != i && (j < i-1 || j > i+1)) {
-					let otherSegment = tempSegs[j];
-					let intersection = currentSegment.intersect(otherSegment);
-					if (intersection.hit) {
-						this.selfIntersections.push(new Point(intersection.x, intersection.y));
-					}
-				}
-			}
-		}
-
-		// Discrete/Fase Fourier Transform
+		// Discrete/Fast Fourier Transform
 		let cx = 0;
 		let cy = 0;
 
@@ -1308,19 +1261,19 @@ class Stroke {
 		const real = this.resampled.map(p => p.x - cx);
 		const imag = this.resampled.map(p => p.y - cy);
 
-		fft(real, imag);
+		let ftRes = fft(real, imag);
 
 		this.coeffs = [];
 
-		const invN = 1 / real.length;
-		for (let i = 0; i < real.length; i++) {
-		    const r = real[i] * invN;
-		    const im = imag[i] * invN;
+		const invN = 1 / ftRes.real.length;
+		for (let i = 0; i < ftRes.real.length; i++) {
+		    const r = ftRes.real[i] * invN;
+		    const im = ftRes.imag[i] * invN;
 
 		    this.coeffs.push({
 		        re: r,
 		        im: im,
-		        freq: getFrequency(i, real.length),
+		        freq: getFrequency(i, ftRes.real.length),
 		        amp: Math.hypot(r, im),
 		        phase: Math.atan2(im, r)
 		    });
@@ -1753,38 +1706,6 @@ class Game {
             // 	ctx.lineTo(seg.p2.x, seg.p2.y);
             // 	ctx.stroke();
             // }
-            
-            // // draw the minimum spanning tree after getting delaunay triangulation
-        	// let tempSegments2 = mst(tempSegments);
-        	// // let tempSegments2 = kruskal(shuffleArray(tempSegments, true));
-            // ctx.strokeStyle = "#FDF";
-        	// ctx.lineWidth = 10;
-            // for (const seg of tempSegments2) {
-            // 	ctx.beginPath();
-            // 	ctx.moveTo(seg.p1.x, seg.p1.y);
-            // 	ctx.lineTo(seg.p2.x, seg.p2.y);
-            // 	ctx.stroke();
-            // }
-
-            // // draw the voronoi cells after getting the delaunay triangulation
-        	// let voronoiPolygons = voronoi(tempTriangles);
-        	// for (let polyArr_i = 0; polyArr_i < voronoiPolygons.length; polyArr_i++) {
-        	// 	let poly = voronoiPolygons[polyArr_i];
-           	// 	ctx.fillStyle = "#"+rgbToHex(255 - parseInt(255 * hash12(polyArr_i)), 50, parseInt(255 * polyArr_i / voronoiPolygons.length))+"5F";
-
-        	// 	for (let p_i = 0; p_i < poly.length; p_i++) {
-        	// 		if (p_i == 0) {
-        	// 			ctx.beginPath();
-        	// 			ctx.moveTo(poly[p_i].x, poly[p_i].y);
-        	// 		} else if (p_i == poly.length - 1) {
-        	// 			ctx.lineTo(poly[p_i].x, poly[p_i].y);
-        	// 			ctx.fill();
-        	// 			ctx.stroke();
-        	// 		} else {
-        	// 			ctx.lineTo(poly[p_i].x, poly[p_i].y);
-        	// 		}
-        	// 	}
-        	// }
 
         	// Messing with FFT
 	        if (this.linePoints[i].traced.length > 1) {
@@ -1794,54 +1715,36 @@ class Game {
 		        //     ctx
 		        // );
 
-				ctx.strokeStyle = "white";
+				ctx.strokeStyle = "#DEDEDE7F";
 				ctx.lineWidth = 4;
 			    ctx.beginPath();
 			    for (let j = 0; j < this.linePoints[i].traced.length; j++) {
+			    	let x = this.linePoints[i].traced[j].x;
+			    	let y = this.linePoints[i].traced[j].y;
 			        if (j === 0)
-			            ctx.moveTo(this.linePoints[i].traced[j].x, this.linePoints[i].traced[j].y);
+			            ctx.moveTo(x, y);
 			        else
 			            ctx.lineTo(
-			                this.linePoints[i].traced[j].x,
-			                this.linePoints[i].traced[j].y
+			                x,
+			                y
 			            );
-			        ctx.fillRect(this.linePoints[i].traced[j].x-5, this.linePoints[i].traced[j].x-5, 10, 10);
+			        // ctx.fillRect(x-5, y-5, 10, 10);
 			    }
 			    ctx.stroke();
 			}
-
-            if (this.linePoints[i].resampled.length > 1) { // mean and centroid of each Stroke object
-	            let {x: cx, y: cy} = polygonMean(this.linePoints[i].resampled);
-	            let {x: cx2, y: cy2} = polygonCentroid(orderPolygon(this.linePoints[i].resampled));
-		        ctx.fillStyle = "#955";
-	            ctx.fillRect(cx - 5, cy - 5, 10, 10);
-	            ctx.fillStyle = "#595";
-	            ctx.fillRect(cx2 - 5, cy2 - 5, 10, 10);
-	        }
         	
 
         	// draw the drawn lines
-        	ctx.strokeStyle = "#55D";
-        	ctx.lineWidth = 5;
-        	// drawCatmullRom(ctx, this.linePoints[i]);
-        	if (this.linePoints[i].resampled.length == 0) {
-        		drawCatmullRomBezier(ctx, this.linePoints[i].raw); // built-in bezier is faster than custom
-        	} else {
-        		drawCatmullRomBezier(ctx, this.linePoints[i].resampled);
-        	}
-        	// for (let j = 0; j < this.linePoints[i].resampled.length; j++) { ctx.fillRect(this.linePoints[i].resampled[j].x - 5, this.linePoints[i].resampled[j].y - 5, 10, 10); } // draw points
-
-        	for (let j = 0; j < this.linePoints[i].selfIntersections.length; j++) {
-        		ctx.fillRect(this.linePoints[i].selfIntersections[j].x - 10, this.linePoints[i].selfIntersections[j].y - 10, 20, 20);
-        	}
-        }
-        if (this.input.mouse.buttonsDown.has(0) && this.linePoints[this.linePoints.length - 1].resampled.length > 0) {
-        	ctx.strokeStyle = "#5D5";
-        	ctx.lineWidth = 3;
-        	ctx.beginPath();
-        	ctx.moveTo(this.linePoints[this.linePoints.length - 1].resampled[this.linePoints[this.linePoints.length - 1].resampled.length - 1].x, this.linePoints[this.linePoints.length - 1].resampled[this.linePoints[this.linePoints.length - 1].resampled.length - 1].y);
-        	ctx.lineTo(this.input.mouse.mx, this.input.mouse.my);
-        	ctx.stroke();
+        	if (this.linePoints[i].traced.length <= 0) {
+	        	ctx.strokeStyle = "#55D";
+	        	ctx.lineWidth = 5;
+	        	if (this.linePoints[i].resampled.length == 0) {
+	        		drawCatmullRomBezier(ctx, this.linePoints[i].raw); // built-in bezier is faster than custom
+	        	} else {
+	        		drawCatmullRomBezier(ctx, this.linePoints[i].resampled);
+	        	}
+	        	// for (let j = 0; j < this.linePoints[i].resampled.length; j++) { ctx.fillRect(this.linePoints[i].resampled[j].x - 5, this.linePoints[i].resampled[j].y - 5, 10, 10); } // draw points
+	        }
         }
 
         // Debug info
