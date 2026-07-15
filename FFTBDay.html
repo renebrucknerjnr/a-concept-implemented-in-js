@@ -34,6 +34,8 @@
 
 <script>
 
+var GLOBAL_SPEED_VARIABLE_FOR_FFT_EPICYCLES = 100;
+
 function floor(n) {
 	return Math.floor(n);
 }
@@ -1380,7 +1382,7 @@ class Game {
         	// Messing with FFT
 	        if (this.linePoints[i].traced.length > 1) {
 				let p = drawEpicycles(
-		            mod(timestamp/1000 * (100/this.linePoints[i].traced.length),1),
+		            mod(timestamp/1000 * (GLOBAL_SPEED_VARIABLE_FOR_FFT_EPICYCLES/this.linePoints[i].traced.length),1),
 		            this.linePoints[i].used,
 		            this.linePoints[i].mean,
 		            ctx,
