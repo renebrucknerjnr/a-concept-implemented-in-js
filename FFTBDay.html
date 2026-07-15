@@ -16,9 +16,21 @@
 			margin:0px;
 			background: #1E1E1E;
 		}
+
+		#thisIsACake {
+			display: block;
+			position: fixed;
+			top:1em;
+			right:1%;
+			font-size: 2em;
+			color:#DADADA;
+			text-align: right;
+			font-family: sans-serif;
+		}
 	</style>
 </head>
 <body>
+	<p id="thisIsACake">This is a <strong style="font-family: serif;color:#D99;">Birthday Cake</strong><br><span style="font-size: 0.8em;">Try Drawing</span><br><sup style="font-size: 0.4em;">By Rene Bruckner Jr.</sup></p>
 
 <script>
 
@@ -34,10 +46,6 @@ function mod(n, m) {
 	return fract(n / m) * m;
 }
 
-function modR(n, m) {
-	return floor(n / m) * m;
-}
-
 function rgbToHex(r, g, b) {
     r = floor(r); g = floor(g); b = floor(b);
     r = r.toString(16);
@@ -46,64 +54,8 @@ function rgbToHex(r, g, b) {
     return ("0".repeat(2-r.length)+r) + ("0".repeat(2-g.length)+g) + ("0".repeat(2-b.length)+b);
 }
 
-function smooth(n) {
-    return n*n*(3 - 2*n);
-}
-
 function lerp(a, b, t) {
     return a*(1-t) + b*t;
-}
-
-function catmullRom(p0, p1, p2, p3, t, T=0) { // https://www.desmos.com/calculator/5rpun0qzkg
-	let t2 = t*t;
-	let t3 = t2*t;
-
-	let a = (2*t3 - 3*t2 + 1);
-	let b = (-2*t3 + 3*t2);
-	let c = (t3 - 2*t2 + t);
-	let d = (t3 - t2);
-
-	let e = (1 - T) * 0.5;
-	let f_X = (p2.x - p0.x);
-	let f_Y = (p2.y - p0.y);
-	let g_X = (p3.x - p1.x);
-	let g_Y = (p3.y - p1.y);
-
-	let one_X = a * p1.x;
-	let two_X = b * p2.x;
-	let three_X = c * e * f_X;
-	let four_X = d * e * g_X;
-
-	let one_Y = a * p1.y;
-	let two_Y = b * p2.y;
-	let three_Y = c * e * f_Y;
-	let four_Y = d * e * g_Y;
-
-	let x = one_X + two_X + three_X + four_X;
-	let y = one_Y + two_Y + three_Y + four_Y;
-	return new Point(x,y);
-}
-
-function drawCatmullRom(ctx, points, steps = 20, T=0) {
-    if (points.length < 2) return;
-
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-
-    for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[Math.max(0, i - 1)];
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const p3 = points[Math.min(points.length - 1, i + 2)];
-
-        for (let j = 1; j <= steps; j++) {
-            const t = j / steps;
-            const p = catmullRom(p0, p1, p2, p3, t, T);
-            ctx.lineTo(p.x, p.y);
-        }
-    }
-
-    ctx.stroke();
 }
 
 function drawCatmullRomBezier(ctx, points) {
@@ -238,15 +190,6 @@ function circumCircle(p1,p2,p3) {
 	return {x: cx, y: cy, r: r};
 }
 
-function isCollinear(p1, p2, p3) {
-    const cross =
-        (p2.x - p1.x) * (p3.y - p1.y) -
-        (p2.y - p1.y) * (p3.x - p1.x);
-
-    const EPSILON = 1e-10;
-    return Math.abs(cross) < EPSILON;
-}
-
 function hashArrayToNumber(arr) {
   // 1. Serialize the array to a consistent string format
   const str = JSON.stringify(arr);
@@ -263,34 +206,6 @@ function hashArrayToNumber(arr) {
   
   // Return as an unsigned 32-bit integer
   return hash >>> 0;
-}
-
-function shuffleArrayInPlace(arr, onlyOnce=false) {
-	if (onlyOnce) { let arrHash = hashArrayToNumber(arr); }
-	for (let i = arr.length - 1; i >= 0; i--) {
-		if (onlyOnce) {
-			let j = parseInt(hash12(i, arrHash)*i);
-		} else {
-			let j = parseInt(secureRandomFloat()*i);
-		}
-		[arr[i], arr[j]] = [arr[j], arr[i]];
-	}
-}
-
-function shuffleArray(arrIn, onlyOnce=false) {
-	let arr = Array.from(arrIn);
-	let arrHash;
-	if (onlyOnce) { arrHash = hashArrayToNumber(arr); }
-	for (let i = arr.length - 1; i >= 0; i--) {
-		let j;
-		if (onlyOnce) {
-			j = parseInt(hash12(i, arrHash)*i);
-		} else {
-			j = parseInt(secureRandomFloat()*i);
-		}
-		[arr[i], arr[j]] = [arr[j], arr[i]];
-	}
-	return arr;
 }
 
 
@@ -464,29 +379,11 @@ class Triangle {
 		}
 	}
 
-	getCircle() {
-		if (this.circ == null) this.circ = circumCircle(this.p1, this.p2, this.p3);
-		return this.circ;
-	}
-
 	pointInCirc(p) { // or on edge
-		// return (p.x - circ.x)**2 + (p.y - circ.y)**2 <= circ.r**2;
-
 		let a = this.p1;
 		let b = this.p2;
 		let c = this.p3;
 		let d = p;
-
-		// absolute coordinates
-		// const az = a.x * a.x + a.y * a.y;
-		// const bz = b.x * b.x + b.y * b.y;
-		// const cz = c.x * c.x + c.y * c.y;
-		// const dz = d.x * d.x + d.y * d.y;
-		// const det =
-		//     a.x * (b.y * (cz - dz) + c.y * (dz - bz) + d.y * (bz - cz))
-		//   - b.x * (a.y * (cz - dz) + c.y * (dz - az) + d.y * (az - cz))
-		//   + c.x * (a.y * (bz - dz) + b.y * (dz - az) + d.y * (az - bz))
-		//   - d.x * (a.y * (bz - cz) + b.y * (cz - az) + c.y * (az - bz));
 
 		// translated to center at (0,0)
 		const ax = a.x - d.x;
@@ -503,36 +400,6 @@ class Triangle {
 		const orient =
 		    (b.x - a.x) * (c.y - a.y) -
 		    (b.y - a.y) * (c.x - a.x);
-
-		// if (orient > 0) {
-		//     // a -> b -> c is counterclockwise (CCW)
-		//     if (det > 0) {
-		// 	    // inside circumcircle
-		// 	    return true;
-		// 	} else if (det < 0) {
-		// 	    // outside
-		// 	    return false;
-		// 	} else {
-		// 	    // exactly on the circumcircle
-		// 	    return true;
-		// 	}
-		// } else if (orient < 0) {
-		//     // a -> b -> c is clockwise (CW)
-		//     // reverse sign if clockwise
-		// 	if (det < 0) {
-		// 	    // inside circumcircle
-		// 	    return true;
-		// 	} else if (det > 0) {
-		// 	    // outside
-		// 	    return false;
-		// 	} else {
-		// 	    // exactly on the circumcircle
-		// 	    return true;
-		// 	}
-		// } else {
-		//     // collinear (no unique circumcircle)
-		// 	return false;
-		// }
 
 		if (orient == 0) return false;
 		const EPS = 1e-12; // accounting for floating point imprecision
@@ -605,7 +472,6 @@ function bowyer_watson(pl) { // [{x:0,y:0}] / [Point()]
 	let tris = [superTriangle]; // list of triangles
 
 	for (let i = 0; i < pl.length; i++) {
-		// Insert one point at a time.
 		let pt = pl[i]; // point_temp
 
 		// Remove every triangle whose circumcircle contains the new point.
@@ -613,11 +479,9 @@ function bowyer_watson(pl) { // [{x:0,y:0}] / [Point()]
 		let removedSegments = [];
 		for (let j = 0; j < tris.length; j++) {
 			if (!tris[j].pointInCirc(pt)) { // check if current point is in the current triangle's circumcircle (CmC)
-				temp_tris.push(tris[j]); // nothing changed
+				temp_tris.push(tris[j]);
 
 			} else {
-				// don't add the same segment to removedSegments twice (inccorrect)
-				// if a segment appears twice, don't add it at all
 				let [temp_s1, temp_s2, temp_s3] = tris[j].getSegments();
 				addBoundaryEdge(removedSegments, temp_s1);
 				addBoundaryEdge(removedSegments, temp_s2);
@@ -630,11 +494,6 @@ function bowyer_watson(pl) { // [{x:0,y:0}] / [Point()]
 		// The boundary of the removed region forms a polygon.
 		// Connect the new point to each boundary edge.
 		for (let j = 0; j < removedSegments.length; j++) {
-			// if (segmentsFormTriangle(removedSegments[j+0], removedSegments[j+1], pt)) {
-			// 	let [t_p1,t_p2,t_p3] = segmentsToTrianglePoints(removedSegments[j+0], removedSegments[j+1], pt);
-			// 	tris.push(new Triangle(t_p1, t_p2, t_p3));
-			// }
-
 			tris.push(new Triangle(removedSegments[j].p1, removedSegments[j].p2, pt));	
 		}
 	}
@@ -662,203 +521,7 @@ function bowyer_watson(pl) { // [{x:0,y:0}] / [Point()]
 	return tris;
 } // return array of Triangles
 
-class UnionFind { // also called disjoint set union
-  constructor(n) {
-    this.parent = Array.from({ length: n }, (_, i) => i); // where does vertex i point (who is its parent)
-    this.rank = Array(n).fill(0); // sub-tree length  (try to keep smaller ones at the end)
-  }
 
-  find(x) { // where does x point  (which parent)
-    if (this.parent[x] !== x) {
-      this.parent[x] = this.find(this.parent[x]); // Path compression (3 -> 2 -> 1) => (3 -> 1)
-    }
-    return this.parent[x];
-  }
-
-  union(a, b) { // are these two vertices already connected?
-    let rootA = this.find(a);
-    let rootB = this.find(b);
-
-    // does the vertex ultimately link back to the same parent vertex
-    if (rootA === rootB) return false; // Yes, it does. You can't add the segment, as it will form a loop.
-
-    // make sure the shorter tree is last
-    if (this.rank[rootA] < this.rank[rootB]) {
-      [rootA, rootB] = [rootB, rootA];
-    }
-
-    this.parent[rootB] = rootA;
-
-    if (this.rank[rootA] === this.rank[rootB]) {
-      this.rank[rootA]++;
-    }
-
-    return true; // Yes, you can add the segment. There will bo no loops.
-  }
-}
-
-// minimum spanning tree Kruskal's Algorithm
-function kruskal(bwsIn) { // pass in bowyer_watson after applying trianglesToUniqueSegments
-	// sort segments based on length
-	// let bw = bwsIn.toSorted((a, b) => (a.length - b.length)); // a - b = 1234;  b - a = 4321
-	let bw = bwsIn;
-	let edgeVertices = Array.from({length:bw.length}, ()=>({u: -1, v: -1, w: -1}));
-	let kruskal_mst = [];
-
-	// get the vertices  (vertices.length = number of nodes)
-	let vertices = new Set();
-	for (const { p1, p2 } of bw) {
-	  vertices.add(pointKey(p1));
-	  vertices.add(pointKey(p2));
-	}
-	vertices = [...vertices];
-	const N = vertices.length;
-
-	for (let i = 0; i < bw.length; i++) {
-		edgeVertices[i].u = vertices.indexOf(pointKey(bw[i].p1));
-		edgeVertices[i].v = vertices.indexOf(pointKey(bw[i].p2));
-		edgeVertices[i].w = bw[i].length;
-	}
-
-	// // code to find each segment's connections 
-	// let connections = Array.from({length:bwIn.length}, ()=>[[], []]);
-	// for (let i = 0; i < bw.length; i++) {
-	// 	// get all connections (segment end to end)
-	// 	for (let j = 0; j < bw.length; j++) {
-	// 		if (i == j) continue;
-	// 		if (bw[i].p1.equals(bw[j].p1) || bw[i].p1.equals(bw[j].p2)) {
-	// 			connections[i][0].push(j);
-	// 		} else if (bw[i].p2.equals(bw[j].p1) || bw[i].p2.equals(bw[j].p2)) {
-	// 			connections[i][1].push(j);
-	// 		}
-	// 	}
-	// }
-
-	let uf = new UnionFind(N);
-	for (let i = 0; i < bw.length; i++) {
-		if (uf.union(edgeVertices[i].u, edgeVertices[i].v)) {
-			kruskal_mst.push(bw[i]);
-
-			if (kruskal_mst.length == N - 1) break;
-		}
-	}
-	
-	return kruskal_mst;
-} // return array of Segments
-
-function mst(bwsIn) {
-	return kruskal(bwsIn.toSorted((a, b) => (a.length - b.length))); // a - b = 1234;  b - a = 4321
-	// return kruskal(bwsIn.toSorted((a, b) => (b.length - a.length))); // max-spanning tree
-	// return kruskal(shuffleArray(bwsIn, true)); // random tree w/o loops
-}
-
-function voronoi(bwtIn) { // pass in bawyer-watson before applying trianglesToUniqueSegments
-	let points = new Map(); // Map to get unique points
-	let circles = [];
-    for (const t of bwtIn) {
-        points.set(pointKey(t.p1), t.p1);
-        points.set(pointKey(t.p2), t.p2);
-        points.set(pointKey(t.p3), t.p3);
-    	circles.push(t.getCircle()); // get circle
-    }
-    points = [...points.values()]; // Map to array
-
-    let result = [];
-
-    for (let i = 0; i < points.length; i++) {
-    	let pt = points[i];
-
-    	// get all triangles with p in their circles
-    	let temp_trianglesI = [];
-    	for (let j = 0; j < bwtIn.length; j++) {
-    		if (bwtIn[j].pointInCirc(pt)) {
-    			temp_trianglesI.push(j);
-    		}
-    	}
-
-    	// sort around p by angle
-    	temp_trianglesI.sort((a,b)=>{
-    		let x1 = circles[a].x;
-    		let y1 = circles[a].y;
-    		let t1 = Math.atan2(y1 - pt.y, x1 - pt.x);
-
-    		let x2 = circles[b].x;
-    		let y2 = circles[b].y;
-    		let t2 = Math.atan2(y2 - pt.y, x2 - pt.x);
-
-    		return t1 - t2;
-    	});
-
-    	let tval = temp_trianglesI.map((v) => {
-    		return {x: circles[v].x, y: circles[v].y};
-    	});
-    	result.push(tval);
-    }
-    return result;
-}
-
-
-function polygonMean(pl) {
-	let n = pl.length - 1;
-	let cx = 0;
-	let cy = 0;
-	for (let i = 0; i <= n; i++) {
-		cx += pl[i].x;
-		cy += pl[i].y;
-	}
-	cx /= n;
-	cy /= n;
-	return {x: cx, y: cy};
-}
-
-function orderPolygon(pl) {
-	let {cx, cy} = polygonMean(pl);
-	let n = pl.length - 1;
-	let t = [];
-	for (let i = 0; i <= n; i++) {
-		t.push(Math.atan2(pl[i].y - cy, pl[i].x - cx)); // angle relative to "center"
-	}
-
-	return pl.toSorted((a,b) => {
-		let i1 = pl.findIndex((p) => p.equals(a));
-		let i2 = pl.findIndex((p) => p.equals(b));
-		return t[i1] - t[i2];
-	}); // sort based on angle
-}
-
-function polygonArea(pl) { // [Point()]
-	let n = pl.length - 1;
-	let sum = 0;
-	let j, k;
-	for (let i = 0; i <= n; i++) {
-		j = parseInt(mod(i + 0, n).toFixed(2));
-		k = parseInt(mod(i + 1, n).toFixed(2));
-		sum += (pl[j].x * pl[k].y - pl[k].x * pl[j].y);
-	}
-	sum /= 2;
-	return sum;
-}
-
-function polygonCentroid(pl) {
-	let n = pl.length - 1;
-	let cx = 0;
-	let cy = 0;
-	let j, k;
-	for (let i = 0; i <= n; i++) {
-		j = parseInt(mod(i + 0, n).toFixed(2));
-		k = parseInt(mod(i + 1, n).toFixed(2));
-		cx += (pl[j].x + pl[k].x) * (pl[j].x * pl[k].y - pl[k].x * pl[j].y);
-		cy += (pl[j].y + pl[k].y) * (pl[j].x * pl[k].y - pl[k].x * pl[j].y);
-	}
-	let a = polygonArea(pl);
-	a *= 6;
-	cx /= a;
-	cy /= a;
-	return {x: cx, y: cy};
-}
-
-
-// THIS WAS COPIED FROM AI
 // RADIX-2 FFT
 function transform(real, imag, inverse = false) {
     const N = real.length;
@@ -1090,17 +753,6 @@ function getFrequency(k, N) {
     return k <= N/2 ? k : k - N;
 }
 
-function coefficientsToXY(cs, t) {
-	let x = 0;
-	let y = 0;
-	for (const c of cs) {
-		const angle = 2 * Math.PI * c.freq * t + c.phase;
-		x += c.amp * Math.cos(angle);
-		y += c.amp * Math.sin(angle); // - if drawing is upside down, otherwise keep +
-    }
-    return new Point(x, y);
-}
-
 function drawEpicycles(t, coeffs, mean, ctx, base = new Point(0,0)) {
 	/*
 		Drawing from the base instead of the mean (center of point) was hard, until it wasn't.
@@ -1216,7 +868,6 @@ function simplifyRDP(points, epsilon) {
     return [points[0], points[lastIdx]];
 }
 
-
 function resampleToEqualSpacing(points, spacing) {
 	let n = points.length - 1;
 	let n2 = 10*n;
@@ -1331,7 +982,6 @@ class Stroke {
 	}
 }
 
-
 class GameArea {
 	constructor() {
 		this.canvas = document.createElement("canvas");
@@ -1346,6 +996,10 @@ class GameArea {
 		} else {
 			this.canvas.width = 1152;
 			this.canvas.height = 2048;
+		}
+		if (this.ctx != null) {
+			this.ctx.width = this.canvas.width;
+			this.ctx.height = this.canvas.height;
 		}
 
 		let canvasAspect = this.canvas.width / this.canvas.height;
@@ -1391,7 +1045,6 @@ class GameArea {
 		this.ctx.height = this.canvas.height;
 	}
 }
-
 
 class InputManager {
     constructor() {
@@ -1593,7 +1246,6 @@ class InputManager {
 	}
 }
 
-
 class Game {
     constructor() {
     	this.area = new GameArea();
@@ -1625,8 +1277,8 @@ class Game {
     	this.penBase = new Point(this.area.ctx.width / 2, this.area.ctx.height - 10);
     	this.path = [];
 
-    	// random points to show delaunay triangulation
- 		for (const p of [{"x":248,"y":77},{"x":262,"y":124},{"x":259,"y":215},{"x":186,"y":594},{"x":208,"y":445},{"x":256,"y":338},{"x":301,"y":293},{"x":335,"y":296},{"x":363,"y":313},{"x":442,"y":471},{"x":464,"y":501},{"x":515,"y":530},{"x":608,"y":555},{"x":698,"y":561},{"x":765,"y":546},{"x":827,"y":521},{"x":886,"y":482},{"x":917,"y":451},{"x":937,"y":428},{"x":956,"y":386},{"x":959,"y":372},{"x":945,"y":364},{"x":892,"y":350},{"x":872,"y":352},{"x":850,"y":400},{"x":847,"y":473},{"x":858,"y":516},{"x":892,"y":552},{"x":914,"y":561},{"x":971,"y":561},{"x":1041,"y":546},{"x":1108,"y":516},{"x":1162,"y":476},{"x":1252,"y":313},{"x":1274,"y":257},{"x":1362,"y":164},{"x":248,"y":77}]) {
+    	// "random" points to show
+ 		for (const p of [{"x":341,"y":1086},{"x":1528,"y":1093},{"x":1557,"y":1086},{"x":1574,"y":1070},{"x":1588,"y":1016},{"x":1578,"y":1003},{"x":1472,"y":1022},{"x":1381,"y":1014},{"x":622,"y":1014},{"x":455,"y":1009},{"x":368,"y":980},{"x":374,"y":949},{"x":403,"y":935},{"x":996,"y":935},{"x":1033,"y":926},{"x":1503,"y":922},{"x":1518,"y":916},{"x":1536,"y":899},{"x":1543,"y":870},{"x":1520,"y":851},{"x":1487,"y":847},{"x":1245,"y":854},{"x":1206,"y":862},{"x":349,"y":860},{"x":354,"y":845},{"x":380,"y":831},{"x":472,"y":810},{"x":1042,"y":808},{"x":1058,"y":789},{"x":1067,"y":760},{"x":1085,"y":668},{"x":1085,"y":627},{"x":1056,"y":571},{"x":1029,"y":575},{"x":1017,"y":587},{"x":1017,"y":608},{"x":1004,"y":608},{"x":994,"y":569},{"x":1054,"y":540},{"x":1067,"y":504},{"x":1067,"y":377},{"x":1060,"y":350},{"x":1050,"y":348},{"x":1035,"y":369},{"x":1040,"y":504},{"x":1002,"y":510},{"x":975,"y":540},{"x":975,"y":587},{"x":1002,"y":617},{"x":998,"y":698},{"x":983,"y":764},{"x":892,"y":777},{"x":358,"y":773},{"x":304,"y":806},{"x":237,"y":891},{"x":225,"y":939},{"x":233,"y":1010},{"x":258,"y":1062},{"x":281,"y":1088},{"x":378,"y":1107},{"x":341,"y":1086}]) {
 			this.linePoints[0].raw.push(new Point(p["x"] / 2048 * this.area.ctx.width, p["y"] / 1152 * this.area.ctx.height));
 		}
 
@@ -1636,10 +1288,6 @@ class Game {
 
         this.loop = this.loop.bind(this);
         requestAnimationFrame(this.loop);
-    }
-
-    resetBoard() {
-
     }
 
     loop(timestamp) {
@@ -1702,8 +1350,9 @@ class Game {
 
     		while (this.linePoints.length > 2) this.linePoints.splice(0,1); // keep only one Stroke
     		while (this.path.length > 2) this.path.splice(0,1);
+    		if (document.querySelector("#thisIsACake")) document.getElementById("thisIsACake").remove();
     			
-    		console.log(this.linePoints[0], this.area.ctx.width, this.area.ctx.height);
+    		// console.log(this.linePoints[0], this.area.ctx.width, this.area.ctx.height); // Get the stroke for setting the starting img
     	}
     }
 
