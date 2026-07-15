@@ -3,6 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='32' font-size='32'>🎉</text></svg>">
 	<title>Happy Birth Day FFT</title>
 	<style>
 		:root {
@@ -1101,10 +1102,16 @@ function coefficientsToXY(cs, t) {
 }
 
 function drawEpicycles(t, coeffs, mean, ctx, base = new Point(0,0)) {
+	/*
+		Drawing from the base instead of the mean (center of point) was hard, until it wasn't.
+
+		I tried using AI instead of doing the work myself, and it couldn't figure it out (and that meant "I couldn't figure it out"). Moral of the story: Do it yourself, then use AI to bugfix and check your work. But, really, just do it yourself.
+	*/
     let x = base.x;
     let y = base.y;
 
     ctx.fillStyle = "#5D5";
+    ctx.lineWidth = 3;
     ctx.fillRect(base.x - 5, base.y - 5, 10, 10);
 
     for (const c of coeffs) {
@@ -1243,25 +1250,26 @@ class Stroke {
 		this.traced = [];
 		this.mean = null;
 		this.ftRes = [];
+		this.triangleSegments = [];
 	}
 
-	process(penBase = new Point(0,0)) {
+	async process(penBase = new Point(0,0)) {
 		// this.raw.push(this.raw[0]); // copy the first point to the end for fft
 
 		// simplify the drawn points
-		this.simple = simplifyRDP(this.raw, 5);
+		this.simple = await simplifyRDP(this.raw, 5);
 		this.simple.push(this.simple[0]); // copy the first point to the end for fft
 
 		// resample so that they're equaly spaced
-		this.resampled = resampleToEqualSpacing(this.simple, 20);
+		this.resampled = await resampleToEqualSpacing(this.simple, 20);
 
 		// Discrete/Fast Fourier Transform
 		let cx = 0;
 		let cy = 0;
 
-		for (const p of this.resampled) {
-		    cx += p.x;
-		    cy += p.y;
+		for (let pi = 0; pi < this.resampled.length; pi++) {
+		    cx += this.resampled[pi].x; // race conditions
+		    cy += this.resampled[pi].y;
 		}
 
 		cx /= this.resampled.length;
@@ -1292,7 +1300,8 @@ class Stroke {
 		}
 		this.coeffs.sort((a, b) => b.amp - a.amp); // sort according to amplitude
 		this.used = this.coeffs.slice(0, 50);
-		// this.used = this.used.toSorted((a, b) => b.freq - a.freq).slice(0, 50); // sort according to frequency
+
+		// this.used = this.used.toSorted((a, b) => a.freq - b.freq).slice(0, 50); // sort according to frequency
 		// this.used = this.coeffs;
 
 		this.traced = [];
@@ -1317,6 +1326,8 @@ class Stroke {
 	        // y += penBase.y;
 			this.traced.push(new Point(x, y));
 		}
+
+		this.triangleSegments = trianglesToUniqueSegments(bowyer_watson(this.traced))
 	}
 }
 
@@ -1615,23 +1626,13 @@ class Game {
     	this.path = [];
 
     	// random points to show delaunay triangulation
-    	// for (let i = 0; i < 50; i++) {
-    	// 	this.linePoints[0].raw.push(new Point(secureRandomFloat()*this.area.ctx.width, secureRandomFloat()*this.area.ctx.height));
-    	// }
+ 		for (const p of [{"x":248,"y":77},{"x":262,"y":124},{"x":259,"y":215},{"x":186,"y":594},{"x":208,"y":445},{"x":256,"y":338},{"x":301,"y":293},{"x":335,"y":296},{"x":363,"y":313},{"x":442,"y":471},{"x":464,"y":501},{"x":515,"y":530},{"x":608,"y":555},{"x":698,"y":561},{"x":765,"y":546},{"x":827,"y":521},{"x":886,"y":482},{"x":917,"y":451},{"x":937,"y":428},{"x":956,"y":386},{"x":959,"y":372},{"x":945,"y":364},{"x":892,"y":350},{"x":872,"y":352},{"x":850,"y":400},{"x":847,"y":473},{"x":858,"y":516},{"x":892,"y":552},{"x":914,"y":561},{"x":971,"y":561},{"x":1041,"y":546},{"x":1108,"y":516},{"x":1162,"y":476},{"x":1252,"y":313},{"x":1274,"y":257},{"x":1362,"y":164},{"x":248,"y":77}]) {
+			this.linePoints[0].raw.push(new Point(p["x"] / 2048 * this.area.ctx.width, p["y"] / 1152 * this.area.ctx.height));
+		}
 
-    	// let w = 20;
-    	// let h = parseInt(this.area.ctx.height / this.area.ctx.width * w);
-    	// for (let i = 0; i < w; i++) {
-    	// 	for (let j = 0; j < h; j++) {
-    	// 		let x = (((i+0.5) / w) * this.area.ctx.width);
-    	// 		let y = (((j+0.5) / h) * this.area.ctx.height);
-    	// 		x += (1 / w) * this.area.ctx.width * secureRandomFloat() * 0.5;
-    	// 		y += (1 / h) * this.area.ctx.height * secureRandomFloat() * 0.5;
-    	// 		this.linePoints[0].raw.push(new Point(x, y));
-    	// 	}
-    	// }
-    	// this.linePoints[0].process();
-    	// this.linePoints.push(new Stroke());
+    	this.linePoints[0].process(this.penBase);
+    	this.linePoints.push(new Stroke());
+    	this.path.push([]);
 
         this.loop = this.loop.bind(this);
         requestAnimationFrame(this.loop);
@@ -1701,6 +1702,8 @@ class Game {
 
     		while (this.linePoints.length > 2) this.linePoints.splice(0,1); // keep only one Stroke
     		while (this.path.length > 2) this.path.splice(0,1);
+    			
+    		console.log(this.linePoints[0], this.area.ctx.width, this.area.ctx.height);
     	}
     }
 
@@ -1715,18 +1718,15 @@ class Game {
         ctx.fillStyle = "#D55";
         ctx.lineWidth = 5;
         for (let i = 0; i < this.linePoints.length; i++) {
-        	// // draw the delaunay triangulation
-        	// let tempTriangles = bowyer_watson(this.linePoints[i].traced);
-        	// let tempSegments = trianglesToUniqueSegments(tempTriangles);
-        	// // let tempCircles = tempTriangles.map(t => t.getCircle());
-            // ctx.strokeStyle = "#999";
-        	// ctx.lineWidth = 2;
-            // for (const seg of tempSegments) {
-            // 	ctx.beginPath();
-            // 	ctx.moveTo(seg.p1.x, seg.p1.y);
-            // 	ctx.lineTo(seg.p2.x, seg.p2.y);
-            // 	ctx.stroke();
-            // }
+        	// draw the delaunay triangulation
+            ctx.strokeStyle = "#90909010";
+        	ctx.lineWidth = 2;
+            for (const seg of this.linePoints[i].triangleSegments) {
+            	ctx.beginPath();
+            	ctx.moveTo(seg.p1.x, seg.p1.y);
+            	ctx.lineTo(seg.p2.x, seg.p2.y);
+            	ctx.stroke();
+            }
 
         	// Messing with FFT
 	        if (this.linePoints[i].traced.length > 1) {
@@ -1743,8 +1743,8 @@ class Game {
 		        this.path[i].splice(0,this.path[i].length - parseInt(this.linePoints[i].traced.length*0.2)); // make sure it stays short
 
 		        // background path
-				ctx.strokeStyle = "#CEFECE5F";
-				ctx.lineWidth = 4;
+				ctx.strokeStyle = "#CEFECE7F";
+				ctx.lineWidth = 6;
 			    ctx.beginPath();
 			    for (let j = 0; j < this.linePoints[i].traced.length; j++) {
 			    	let x = this.linePoints[i].traced[j].x;
@@ -1761,6 +1761,7 @@ class Game {
 			    ctx.stroke();
 
 			    // fading path
+			    ctx.lineWidth = 8;
 			    for (let j = 0; j < this.path[i].length-1; j++) {
 			    	ctx.strokeStyle = "#CEFE" + rgbToHex(105 + 150*(j/(this.path[i].length-1)),0,0).slice(0,2).toUpperCase();
 			    	ctx.beginPath();
@@ -1780,16 +1781,8 @@ class Game {
 	        	} else {
 	        		drawCatmullRomBezier(ctx, this.linePoints[i].resampled);
 	        	}
-	        	// for (let j = 0; j < this.linePoints[i].resampled.length; j++) { ctx.fillRect(this.linePoints[i].resampled[j].x - 5, this.linePoints[i].resampled[j].y - 5, 10, 10); } // draw points
 	        }
         }
-
-        // Debug info
-        ctx.fillStyle = "white";
-        ctx.font = "60px monospace";
-        ctx.fillText(`R_FPS: ${this.currentRenderFPS.toFixed(0)}`, 10, 60);
-        // let canBRect = this.area.canvas.getBoundingClientRect();
-        // ctx.fillText(`Mouse: (${Math.round((this.input.getPointer().x - canBRect.left)*(ctx.width / canBRect.width))}, ${Math.round((this.input.getPointer().y - canBRect.top)*(ctx.height / canBRect.height))})`, 10, 40);
     }
 }
 
