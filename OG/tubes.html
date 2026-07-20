@@ -21,6 +21,8 @@
 
 <script>
 
+var GLOBAL_SPEED_VARIABLE_FOR_FFT_EPICYCLES = 100;
+
 function floor(n) {
 	return Math.floor(n);
 }
@@ -857,7 +859,7 @@ function polygonCentroid(pl) {
 }
 
 
-// THIS WAS COPIED FROM AI
+// THIS WAS COPIED FROM AI, see here for a better understanding of the math:  https://www.desmos.com/calculator/pgguswx2pc
 // RADIX-2 FFT
 function transform(real, imag, inverse = false) {
     const N = real.length;
@@ -1046,7 +1048,7 @@ function fft(real, imag) {
 		    i: imag[i]
 		}));
 	*/
-    bluesteinFFT(real, imag);
+    return bluesteinFFT(real, imag);
 }
 
 function ifft(real, imag) {
@@ -1076,7 +1078,7 @@ function ifft(real, imag) {
 	x: radius * cos(angle)
 	y: radius * sin(angle)
 	*/
-    bluesteinIFFT(real, imag);
+    return bluesteinIFFT(real, imag);
 }
 
 function getFrequency(k, N) {
@@ -1089,14 +1091,18 @@ function getFrequency(k, N) {
     return k <= N/2 ? k : k - N;
 }
 
-function drawEpicycles(t, coeffs, ctx = null) {
+function drawEpicycles(t, coeffs, mean, ctx, base = new Point(0,0)) {
+	/*
+		Drawing from the base instead of the mean (center of point) was hard, until it wasn't.
 
-    let x = 0;
-    let y = 0;
+		I tried using AI instead of doing the work myself, and it couldn't figure it out (and that meant "I couldn't figure it out"). Moral of the story: Do it yourself, then use AI to bugfix and check your work. But, really, just do it yourself.
+	*/
+    let x = base.x;
+    let y = base.y;
 
-    if (ctx != null) {
-    	ctx.beginPath();
-    }
+    ctx.fillStyle = "#5D5";
+    ctx.lineWidth = 3;
+    ctx.fillRect(base.x - 5, base.y - 5, 10, 10);
 
     for (const c of coeffs) {
 
@@ -1113,26 +1119,24 @@ function drawEpicycles(t, coeffs, ctx = null) {
 
 
         // draw circle
-        if (ctx != null) {
-	        ctx.strokeStyle = "#555";
-	        ctx.beginPath();
-	        ctx.arc(
-	            prevX,
-	            prevY,
-	            radius,
-	            0,
-	            Math.PI * 2
-	        );
-	        ctx.stroke();
+        ctx.strokeStyle = "#555";
+        ctx.beginPath();
+        ctx.arc(
+            prevX,
+            prevY,
+            radius,
+            0,
+            Math.PI * 2
+        );
+        ctx.stroke();
 
 
-	        // draw arm
-	        ctx.strokeStyle = "#999";
-	        ctx.beginPath();
-	        ctx.moveTo(prevX, prevY);
-	        ctx.lineTo(x, y);
-	        ctx.stroke();
-	    }
+        // draw arm
+        ctx.strokeStyle = "#999";
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
     }
 
     return new Point(x, y);
@@ -1230,20 +1234,26 @@ class Stroke {
 		this.raw = [];
 		this.simple = [];
 		this.resampled = [];
+
 		this.tangent = [];
 		this.curvature = [];
 		this.selfIntersections = [];
+		
 		this.coeffs = []; // fft
 		this.used = [];
 		this.traced = [];
+		this.mean = null;
+		this.ftRes = [];
+		this.triangleSegments = [];
 	}
 
-	process() {
+	async process(penBase = new Point(0,0)) {
 		// simplify the drawn points
-		this.simple = simplifyRDP(this.raw, 5);
+		this.simple = await simplifyRDP(this.raw, 5);
+		// this.simple.push(this.simple[0]); // copy the first point to the end for fft
 
 		// resample so that they're equaly spaced
-		this.resampled = resampleToEqualSpacing(this.simple, 20);
+		this.resampled = await resampleToEqualSpacing(this.simple, 20);
 
 		// compute the tangents
 		this.tangent = [];
@@ -1297,30 +1307,33 @@ class Stroke {
 		let cx = 0;
 		let cy = 0;
 
-		for (const p of this.resampled) {
-		    cx += p.x;
-		    cy += p.y;
+		for (let pi = 0; pi < this.resampled.length; pi++) {
+		    cx += this.resampled[pi].x; // race conditions
+		    cy += this.resampled[pi].y;
 		}
 
 		cx /= this.resampled.length;
 		cy /= this.resampled.length;
+		this.mean = new Point(cx, cy);
 
-		const real = this.resampled.map(p => p.x - cx);
-		const imag = this.resampled.map(p => p.y - cy);
+		// const real = this.resampled.map(p => p.x - cx);
+		// const imag = this.resampled.map(p => p.y - cy);
+		const real = this.resampled.map(p => p.x - penBase.x);
+		const imag = this.resampled.map(p => p.y - penBase.y);
 
-		fft(real, imag);
+		this.ftRes = fft(real, imag);
 
 		this.coeffs = [];
 
-		const invN = 1 / real.length;
-		for (let i = 0; i < real.length; i++) {
-		    const r = real[i] * invN;
-		    const im = imag[i] * invN;
+		const invN = 1 / this.ftRes.real.length;
+		for (let i = 0; i < this.ftRes.real.length; i++) {
+		    const r = this.ftRes.real[i] * invN;
+		    const im = this.ftRes.imag[i] * invN;
 
 		    this.coeffs.push({
 		        re: r,
 		        im: im,
-		        freq: getFrequency(i, real.length),
+		        freq: getFrequency(i, this.ftRes.real.length),
 		        amp: Math.hypot(r, im),
 		        phase: Math.atan2(im, r)
 		    });
@@ -1345,11 +1358,14 @@ class Stroke {
 				y += c.amp * Math.sin(angle); // - if drawing is upside down, otherwise keep +
 		    }
 
-	        x += cx;
-	        y += cy;
+	        // x += cx;
+	        // y += cy;
+	        // x += penBase.x;
+	        // y += penBase.y;
 			this.traced.push(new Point(x, y));
 			// this.path = this.path.slice(-points.length+1);
 		}
+		this.triangleSegments = trianglesToUniqueSegments(bowyer_watson(this.traced))
 	}
 }
 
@@ -1623,7 +1639,11 @@ class Game {
 
     	// the lines
     	this.linePoints = new Array();
+    	this.path = new Array();
+    	this.penBase;
+
     	this.linePoints.push(new Stroke());
+    	this.path.push([]);
 
         // Timing
         this.lastTime = 0;
@@ -1641,6 +1661,7 @@ class Game {
 
     start() {
     	this.area.start();
+    	this.penBase = new Point(this.area.ctx.width / 2, this.area.ctx.height - 10);
     	this.path = [];
 
     	// random points to show delaunay triangulation
@@ -1659,8 +1680,13 @@ class Game {
     	// 		this.linePoints[0].raw.push(new Point(x, y));
     	// 	}
     	// }
-    	// this.linePoints[0].process();
-    	// this.linePoints.push(new Stroke());
+
+    	for (const p of [{"x":341,"y":1086},{"x":1528,"y":1093},{"x":1557,"y":1086},{"x":1574,"y":1070},{"x":1588,"y":1016},{"x":1578,"y":1003},{"x":1472,"y":1022},{"x":1381,"y":1014},{"x":622,"y":1014},{"x":455,"y":1009},{"x":368,"y":980},{"x":374,"y":949},{"x":403,"y":935},{"x":996,"y":935},{"x":1033,"y":926},{"x":1503,"y":922},{"x":1518,"y":916},{"x":1536,"y":899},{"x":1543,"y":870},{"x":1520,"y":851},{"x":1487,"y":847},{"x":1245,"y":854},{"x":1206,"y":862},{"x":349,"y":860},{"x":354,"y":845},{"x":380,"y":831},{"x":472,"y":810},{"x":1042,"y":808},{"x":1058,"y":789},{"x":1067,"y":760},{"x":1085,"y":668},{"x":1085,"y":627},{"x":1056,"y":571},{"x":1029,"y":575},{"x":1017,"y":587},{"x":1017,"y":608},{"x":1004,"y":608},{"x":994,"y":569},{"x":1054,"y":540},{"x":1067,"y":504},{"x":1067,"y":377},{"x":1060,"y":350},{"x":1050,"y":348},{"x":1035,"y":369},{"x":1040,"y":504},{"x":1002,"y":510},{"x":975,"y":540},{"x":975,"y":587},{"x":1002,"y":617},{"x":998,"y":698},{"x":983,"y":764},{"x":892,"y":777},{"x":358,"y":773},{"x":304,"y":806},{"x":237,"y":891},{"x":225,"y":939},{"x":233,"y":1010},{"x":258,"y":1062},{"x":281,"y":1088},{"x":378,"y":1107},{"x":341,"y":1086}]) {
+			this.linePoints[0].raw.push(new Point(p["x"] / 2048 * this.area.ctx.width, p["y"] / 1152 * this.area.ctx.height));
+		}
+		this.linePoints[0].process(this.penBase);
+    	this.linePoints.push(new Stroke());
+    	this.path.push([]);
 
         this.loop = this.loop.bind(this);
         requestAnimationFrame(this.loop);
@@ -1723,10 +1749,13 @@ class Game {
     			this.linePoints[lastLineI].raw.push(new Point(this.input.mouse.mx, this.input.mouse.my));
     		}
     	} else if (this.input.mouse.buttonsReleased.has(0) || this.input.touchReleased.size > 0) {
-    		this.linePoints[this.linePoints.length-1].process();
+    		this.linePoints[this.linePoints.length-1].process(this.penBase);
 
     		this.linePoints.push(new Stroke());
+    		this.path.push([]);
+
     		while (this.linePoints.length > 2) this.linePoints.splice(0,1); // keep only one Stroke
+    		while (this.path.length > 2) this.path.splice(0,1);
     	}
     }
 
@@ -1786,28 +1815,57 @@ class Game {
         	// 	}
         	// }
 
+        	// draw the drawn lines
+        	ctx.strokeStyle = "#55D";
+        	ctx.lineWidth = 5;
+        	// drawCatmullRom(ctx, this.linePoints[i]);
+        	if (this.linePoints[i].resampled.length == 0) {
+        		drawCatmullRomBezier(ctx, this.linePoints[i].raw); // built-in bezier is faster than custom
+        	} else {
+        		drawCatmullRomBezier(ctx, this.linePoints[i].resampled);
+        	}
+
         	// Messing with FFT
 	        if (this.linePoints[i].traced.length > 1) {
-				// drawEpicycles(
-		        //     mod(timestamp/10000,1),
-		        //     traced,
-		        //     ctx
-		        // );
+				let p = drawEpicycles(
+		            mod(timestamp/1000 * (GLOBAL_SPEED_VARIABLE_FOR_FFT_EPICYCLES/this.linePoints[i].traced.length),1),
+		            this.linePoints[i].used,
+		            this.linePoints[i].mean,
+		            ctx,
+		            this.penBase
+		        );
+		        ctx.beginPath();ctx.arc(p.x, p.y, 5, 0, 2*Math.PI);ctx.fill();
+		        this.path[i].push(p); // add to the fading path
 
-				ctx.strokeStyle = "white";
-				ctx.lineWidth = 4;
+		        this.path[i].splice(0,this.path[i].length - parseInt(this.linePoints[i].traced.length*0.2)); // make sure it stays short
+
+		        // background path
+				ctx.strokeStyle = "#CEFECE7F";
+				ctx.lineWidth = 6;
 			    ctx.beginPath();
 			    for (let j = 0; j < this.linePoints[i].traced.length; j++) {
+			    	let x = this.linePoints[i].traced[j].x;
+			    	let y = this.linePoints[i].traced[j].y;
 			        if (j === 0)
-			            ctx.moveTo(this.linePoints[i].traced[j].x, this.linePoints[i].traced[j].y);
+			            ctx.moveTo(x, y);
 			        else
 			            ctx.lineTo(
-			                this.linePoints[i].traced[j].x,
-			                this.linePoints[i].traced[j].y
+			                x,
+			                y
 			            );
-			        ctx.fillRect(this.linePoints[i].traced[j].x-5, this.linePoints[i].traced[j].x-5, 10, 10);
+			        // ctx.fillRect(x-5, y-5, 10, 10);
 			    }
 			    ctx.stroke();
+
+			    // fading path
+			    ctx.lineWidth = 8;
+			    for (let j = 0; j < this.path[i].length-1; j++) {
+			    	ctx.strokeStyle = "#CEFE" + rgbToHex(105 + 150*(j/(this.path[i].length-1)),0,0).slice(0,2).toUpperCase();
+			    	ctx.beginPath();
+			    	ctx.moveTo(this.path[i][parseInt(mod(j+0, this.path[i].length))].x, this.path[i][parseInt(mod(j+0, this.path[i].length))].y);
+			    	ctx.lineTo(this.path[i][parseInt(mod(j+1, this.path[i].length))].x, this.path[i][parseInt(mod(j+1, this.path[i].length))].y);
+			    	ctx.stroke();
+			    }
 			}
 
             if (this.linePoints[i].resampled.length > 1) { // mean and centroid of each Stroke object
@@ -1820,15 +1878,6 @@ class Game {
 	        }
         	
 
-        	// draw the drawn lines
-        	ctx.strokeStyle = "#55D";
-        	ctx.lineWidth = 5;
-        	// drawCatmullRom(ctx, this.linePoints[i]);
-        	if (this.linePoints[i].resampled.length == 0) {
-        		drawCatmullRomBezier(ctx, this.linePoints[i].raw); // built-in bezier is faster than custom
-        	} else {
-        		drawCatmullRomBezier(ctx, this.linePoints[i].resampled);
-        	}
         	// for (let j = 0; j < this.linePoints[i].resampled.length; j++) { ctx.fillRect(this.linePoints[i].resampled[j].x - 5, this.linePoints[i].resampled[j].y - 5, 10, 10); } // draw points
 
         	for (let j = 0; j < this.linePoints[i].selfIntersections.length; j++) {
