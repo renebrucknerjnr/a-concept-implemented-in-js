@@ -152,7 +152,6 @@ for (let i = 0; i < populationSize; i++) population.push(randString());
 
 
 async function train() {
-    console.log(useOtherMutations);
     const tick = () => new Promise(requestAnimationFrame); // const sleep = () => new Promise(resolve => setTimeout(resolve, 0));
 
     document.getElementById("startButton").disabled = true;
