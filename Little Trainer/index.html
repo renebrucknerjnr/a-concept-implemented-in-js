@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hello, World!</title>
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='32' font-size='32'>🔤</text></svg>">
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+      <textarea id="textInput">Hello World!</textarea>
+      <input id="startButton" type="button" value="Start" onclick="train()">
+      
+      <div id="inputs">
+      <label>Population size</label>
+      <input id="populationSizeInput" type="range" min="2" max="100" step="2" value="20">
+      <input id="populationSizeInput2" type="number" min="2" max="100" step="2" value="20">
+      
+      <label>Generations</label>
+      <input id="generationsInput" type="range" min="10" max="10000" step="10" value="1000">
+      <input id="generationsInput2" type="number" min="10" max="10000" step="10" value="1000">
+      
+      <label>Mutation Chance (%)</label>
+      <input id="mutationPercentInput" type="range" min="0" max="100" step="0.5" value="2">
+      <input id="mutationPercentInput2" type="number" min="0" max="100" step="0.5" value="2">
+      
+      <label id="mutationSignificanceLabel">Mutation Significance (%)</label>
+      <input id="mutationSignificanceInput" type="range" min="0" max="100" step="0.5" value="40">
+      <input id="mutationSignificanceInput2" type="number" min="0" max="100" step="0.5" value="40">
+      
+      <label>Elites (%)</label>
+      <input id="elitesInput" type="range" min="1" max="100" step="2" value="20">
+      <input id="elitesInput2" type="number" min="1" max="100" step="2" value="20">
+      
+      <label>Use Different Mutation Style</label>
+      <input id="useOtherMutationsInput" type="checkbox">
+      </div>
+      <hr>
+      <textarea id="log" readonly></textarea>
+      
+      <a href="https://elaq.github.io/weasel/" alt="Algorithm" title="Not what I used, but it's a better resource" style="display:inline-block;position:fixed;bottom:0;right:0;padding:0.5em;margin:0.1em;background:transparent;color:#bcccdc;">Reference</a>
+      <script src="script.js"></script>
+  </body>
+</html>
