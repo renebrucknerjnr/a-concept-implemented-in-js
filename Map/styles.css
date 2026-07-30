@@ -1,0 +1,10 @@
+:root {
+	color-scheme: light only !important;
+}
+
+body {
+	overflow: hidden;
+	padding:0px;
+	margin:0px;
+	background: #1E1E1E;
+}
