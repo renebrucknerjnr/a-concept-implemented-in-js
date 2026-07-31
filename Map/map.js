@@ -488,7 +488,7 @@ class Quad {
 	        if (!hit)
 	            continue;
 
-	        if (!best || hit.t < best.t) {
+	        if (!best || hit.t <= best.t) {
 	            best = {
 	                t: hit.t,
 	                point: hit.point,

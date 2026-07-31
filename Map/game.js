@@ -503,7 +503,7 @@ class Game {
         // https://www.desmos.com/notebook/jequqkbjby
         // fixed x, fish-eye-fixed, stereographic projection
         const FOV = 90;
-        const RAY_NUMBER = 100;
+        const RAY_NUMBER = 200;
 
         const FOV_RAD = FOV * Math.PI / 180;
         const FOV_RAD_2 = FOV_RAD * 0.5;
@@ -557,7 +557,7 @@ class Game {
 
 
         // Draw top down maze
-        if (this.drawMiniMap || true) {
+        if (this.drawMiniMap) {
 	        const MAZE_SCALE = 30;
 	        const MAZE_START = new Point(this.area.canvas.width - MAZE_SCALE*this.myMaze.width - 10, 10);
 	        ctx.fillStyle = "#cdcd9a";
