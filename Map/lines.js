@@ -224,18 +224,57 @@ class Point {
     }
 }
 
+class Rect {
+    constructor(m1, m2) { // Point min, Point max
+        this.min = m1;
+        this.max = m2;
+    }
+
+    intersectSeg(seg) {
+        return seg.intersectRect(this);
+    }
+
+    intersectRect(rect) {
+        let hit = (this.min.x <= rect.max.x) &&
+                  (this.max.x >= rect.min.x) &&
+                  (this.min.y <= rect.max.y) &&
+                  (this.max.y >= rect.min.y);
+        let minNew = new Point(Math.max(this.min.x, rect.min.x),Math.max(this.min.y, rect.min.y));
+        let maxNew = new Point(Math.min(this.max.x, rect.max.x),Math.min(this.max.y, rect.max.y));
+        return {hit: hit, rect: new Rect(minNew, maxNew)};
+    }
+
+    containsRect(rect) {
+        return (
+            rect.min.x >= this.min.x &&
+            rect.min.y >= this.min.y &&
+            rect.max.x <= this.max.x &&
+            rect.max.y <= this.max.y
+        );
+    }
+}
+
 class Segment {
     constructor(p1, p2) {
         this.p1 = p1;
         this.p2 = p2;
         this.length = -1;
+        this.bounds = null;
         this.computeLength();
+        this.computeBounds();
     }
 
     computeLength() {
         let dx = this.p1.x - this.p2.x;
         let dy = this.p1.y - this.p2.y;
         this.length = Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    computeBounds() {
+        this.bounds = new Rect(
+            new Point(Math.min(this.p1.x, this.p2.x), Math.min(this.p1.y, this.p2.y)),
+            new Point(Math.max(this.p1.x, this.p2.x), Math.max(this.p1.y, this.p2.y))
+        );
     }
 
     equals(s) { // direction doesn't matter (for now)
@@ -259,6 +298,61 @@ class Segment {
         let Iy = this.p1.y + t * (this.p2.y - this.p1.y);
         let hit = (W == 0 ? false : (u < 0 ? false : (u > 1 ? false : (t < 0 ? false : (t > 1 ? false : true)))));
         return {hit: hit, x: Ix, y: Iy, t: t, u: u};
+    }
+
+    intersectRect(rect) {
+        // https://www.desmos.com/calculator/vj7kndjw9f
+        let dx = this.p2.x - this.p1.x;
+        let dy = this.p2.y - this.p1.y;
+
+        let t_xmin = float('-inf'), t_xmax = float('inf');
+        let t_ymin = float('-inf'), t_ymax = float('inf');
+
+        // X-axis slab
+        if (dx !== 0) {
+            let tx1 = (rect.min.x - this.p1.x) / dx;
+            let tx2 = (rect.max.x - this.p1.x) / dx;
+            t_xmin = Math.min(tx1, tx2);
+            t_xmax = Math.max(tx1, tx2);
+        } else {
+            // Parallel to X-axis: check if completely outside bounds
+            if (this.p1.x < rect.min.x || this.p1.x > rect.max.x) {
+                return { hit: false, x: 0, y: 0, t: 0 };
+            }
+        }
+
+        // Y-axis slab
+        if (dy !== 0) {
+            let ty1 = (rect.min.y - this.p1.y) / dy;
+            let ty2 = (rect.max.y - this.p1.y) / dy;
+            t_ymin = Math.min(ty1, ty2);
+            t_ymax = Math.max(ty1, ty2);
+        } else {
+            // Parallel to Y-axis: check if completely outside bounds
+            if (this.p1.y < rect.min.y || this.p1.y > rect.max.y) {
+                return { hit: false, x: 0, y: 0, t: 0 };
+            }
+        }
+
+        // Find final overlapping entry/exit parameters
+        let t_min = Math.max(t_xmin, t_ymin);
+        let t_max = Math.min(t_xmax, t_ymax);
+
+        // Conditional checks to see if the intersection is valid
+        let hit = (t_min <= t_max && t_max >= 0 && t_min <= 1);
+
+        // Calculate exact coordinates using the entry point t_min
+        // Clamp t_min to 0 if the segment starts inside the box
+        let t_hit = t_min < 0 ? 0 : t_min; 
+        let Ix = this.p1.x + t_hit * dx;
+        let Iy = this.p1.y + t_hit * dy;
+
+        return {
+            hit: hit,
+            x: Ix,
+            y: Iy,
+            t: t_min // Entry parameter along the segment
+        };
     }
 
     hasPoint(p) {
