@@ -315,6 +315,7 @@ class Game {
     					 rotAccX: 0,
     					 rotAccY: 0,
     					 radius: 0.2};
+    	this.drawMiniMap = false;
 
         // Timing
         this.lastTime = 0;
@@ -498,33 +499,6 @@ class Game {
         // Clear
         ctx.clearRect(0, 0, ctx.width, ctx.height);
 
-        // Draw top down maze
-        const MAZE_SCALE = 50;
-        const MAZE_START = new Point(this.area.canvas.width - MAZE_SCALE*this.myMaze.width - 10, 10);
-        ctx.fillStyle = "#cdcd9a";
-        ctx.fillRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE);
-        
-        // draw top down player on maze
-        ctx.fillStyle = "#1e1e1e";
-        ctx.strokeStyle = "#ff1e1e";
-        ctx.lineWidth = "3";
-     	ctx.beginPath();
-		ctx.arc(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE, MAZE_SCALE*this.myPlayer.radius, 0, Math.PI*2);
-		ctx.fill();
-		ctx.beginPath();
-		ctx.moveTo(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE);
-		ctx.lineTo(MAZE_START.x + (this.myPlayer.pos.x + Math.cos(this.myPlayer.rotX)) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y + Math.sin(this.myPlayer.rotX)) * MAZE_SCALE);
-		ctx.stroke();
-
-    	ctx.strokeStyle = "#9a9acd";
-    	ctx.lineWidth = "5";
-        for (const s of this.myMaze.segments) {
-        	ctx.beginPath();
-        	ctx.moveTo(s.p1.x * MAZE_SCALE + MAZE_START.x, s.p1.y * MAZE_SCALE + MAZE_START.y);
-        	ctx.lineTo(s.p2.x * MAZE_SCALE + MAZE_START.x, s.p2.y * MAZE_SCALE + MAZE_START.y);
-        	ctx.stroke();
-        }
-
         // raycast scene
         // https://www.desmos.com/notebook/jequqkbjby
         // fixed x, fish-eye-fixed, stereographic projection
@@ -558,12 +532,59 @@ class Game {
         		const dist = cast.t * Math.cos(angDiff);
         		const H = F / dist;
 
-        		const x = i * BAR_WIDTH;
+        		const x = floor(i * BAR_WIDTH);
+				const x1 = floor((i + 1) * BAR_WIDTH);
         		const y = (SCREEN_HEIGHT - H) * 0.5;
 
-        		ctx.fillRect(x, y, BAR_WIDTH, H);
+        		const wallDelta = new Point(cast.segment.p1.x - cast.segment.p2.x, cast.segment.p1.y - cast.segment.p2.y);
+
+        		let brightness = Math.max(10, Math.min(255, 255 - dist * 40));
+        		let R = brightness;
+        		let G = brightness;
+        		let B = brightness;
+        		if (wallDelta.x >= wallDelta.y) {
+        			R *= 0.8;
+        			G *= 0.8;
+        		} else {
+        			B *= 0.8;
+        			G *= 0.8;
+        		}
+        		if (floor((cast.point.x + cast.point.y)*5) % 2 == 0) G *= 0.5; // vertical stripes in walls
+				ctx.fillStyle = `rgb(${R}, ${G}, ${B})`;
+        		ctx.fillRect(x, y, x1 - x, H);
         	}
         }
+
+
+        // Draw top down maze
+        if (this.drawMiniMap || true) {
+	        const MAZE_SCALE = 30;
+	        const MAZE_START = new Point(this.area.canvas.width - MAZE_SCALE*this.myMaze.width - 10, 10);
+	        ctx.fillStyle = "#cdcd9a";
+	        ctx.fillRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE);
+	        
+	        // draw top down player on maze
+	        ctx.fillStyle = "#1e1e1e";
+	        ctx.strokeStyle = "#ff1e1e";
+	        ctx.lineWidth = "3";
+	     	ctx.beginPath();
+			ctx.arc(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE, MAZE_SCALE*this.myPlayer.radius, 0, Math.PI*2);
+			ctx.fill();
+			ctx.beginPath();
+			ctx.moveTo(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE);
+			ctx.lineTo(MAZE_START.x + (this.myPlayer.pos.x + Math.cos(this.myPlayer.rotX)) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y + Math.sin(this.myPlayer.rotX)) * MAZE_SCALE);
+			ctx.stroke();
+
+	    	ctx.strokeStyle = "#9a9acd";
+	    	ctx.lineWidth = "5";
+	        for (const s of this.myMaze.segments) {
+	        	ctx.beginPath();
+	        	ctx.moveTo(s.p1.x * MAZE_SCALE + MAZE_START.x, s.p1.y * MAZE_SCALE + MAZE_START.y);
+	        	ctx.lineTo(s.p2.x * MAZE_SCALE + MAZE_START.x, s.p2.y * MAZE_SCALE + MAZE_START.y);
+	        	ctx.stroke();
+	        }
+	    }
+
 
         // Debug info
         // ctx.fillStyle = "white";
