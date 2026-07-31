@@ -74,6 +74,8 @@ class InputManager {
             y: 0,
             mx: 0,
             my: 0,
+            moveX: 0,
+            moveY: 0,
             buttonsDown: new Set(),
             buttonsPressed: new Set(),
             buttonsReleased: new Set()
@@ -94,6 +96,8 @@ class InputManager {
 		    y: 0
 		};
 
+		this.isPointerLocked = false; // Track lock state internally
+
         this._bindEvents();
     }
 
@@ -113,11 +117,16 @@ class InputManager {
 
         // Mouse move
         window.addEventListener("mousemove", (e) => {
-            this.mouse.x = e.clientX;
-            this.mouse.y = e.clientY;
 
-            this.swipe.x = e.clientX;
-		    this.swipe.y = e.clientY;
+        	this.mouse.moveX = e.movementX;
+        	this.mouse.moveY = e.movementY;
+
+        	if (!this.isPointerLocked) {
+                this.mouse.x = e.clientX;
+                this.mouse.y = e.clientY;
+                this.swipe.x = e.clientX;
+                this.swipe.y = e.clientY;
+            }
         });
 
         // Mouse down
@@ -142,6 +151,15 @@ class InputManager {
             this.lastMouseReleaseXY.y = e.clientY;
 
             this.swipe.active = false;
+        });
+
+        // Pointer Lock State Changes
+        document.addEventListener("pointerlockchange", () => {
+            // Checks if any element is currently locking the cursor
+            this.isPointerLocked = !!document.pointerLockElement; 
+            if (!this.isPointerLocked) {
+                this.swipe.active = false;
+            }
         });
 
         // TOUCH START
@@ -202,6 +220,18 @@ class InputManager {
         });
     }
 
+    // Call this via user interaction loop (e.g. click to start game)
+    requestLock(element) {
+        if (!element) return;
+        element.requestPointerLock({ unadjustedMovement: true }).catch(err => {
+            console.error("Pointer lock rejected:", err);
+        });
+    }
+
+    exitLock() {
+        document.exitPointerLock();
+    }
+
     // Keyboard queries
     isKeyDown(code) {
         return this.keysDown.has(code);
@@ -260,6 +290,10 @@ class InputManager {
 	    // touch
 	    this.touchPressed.clear();
 	    this.touchReleased.clear();
+
+	    // clear deltas
+	    this.mouse.moveX = 0;
+	    this.mouse.moveY = 0;
 	}
 }
 
@@ -269,7 +303,17 @@ class Game {
     	this.area = new GameArea();
 
     	// the maze
+    	this.sensitivity = 1.0;
     	this.myMaze = new Maze(10, 10);
+    	this.myPlayer = {pos: new Point(0.5,0.5),  // world pos
+    					 vel: new Point(0,0),  // velocity
+    					 acc: new Point(0,0),  // acceleration
+    					 rotX: 0.7853981633974483,
+    					 rotY: 0,
+    					 rotVelX: 0,
+    					 rotVelY: 0,
+    					 rotAccX: 0,
+    					 rotAccY: 0};
 
         // Timing
         this.lastTime = 0;
@@ -287,6 +331,13 @@ class Game {
 
     start() {
     	this.area.start();
+
+		// Trigger lock on user action
+		this.area.canvas.addEventListener("click", () => {
+		    if (!this.input.isPointerLocked) {
+		        this.input.requestLock(this.area.canvas);
+		    }
+		});
 
         this.loop = this.loop.bind(this);
         requestAnimationFrame(this.loop);
@@ -323,6 +374,73 @@ class Game {
     	this.currentUpdateFPS = 1 / dt;
         
         // if (this.input.isKeyDown("KeyW") || this.input.isKeyDown("ArrowUp")) this.player.d = 3;
+
+    	// update player
+    	let playerVelNeedsDiv = false;
+        if (this.input.isKeyDown("KeyW")) {
+        	this.myPlayer.acc.x += Math.cos(this.myPlayer.rotX)*0.005;
+        	this.myPlayer.acc.y += Math.sin(this.myPlayer.rotX)*0.005;
+        	playerVelNeedsDiv = true;
+        }
+        else if (this.input.isKeyDown("KeyS")) {
+        	this.myPlayer.acc.x -= Math.cos(this.myPlayer.rotX)*0.005;
+        	this.myPlayer.acc.y -= Math.sin(this.myPlayer.rotX)*0.005;
+        	playerVelNeedsDiv = true;
+        }
+        if (this.input.isKeyDown("KeyA")) {
+        	if (playerVelNeedsDiv) {
+				this.myPlayer.acc.x *= 0.5;
+				this.myPlayer.acc.y *= 0.5;
+				this.myPlayer.acc.x -= 0.5*Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.y -= 0.5*Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.x *= 1.4142135623730951;
+				this.myPlayer.acc.y *= 1.4142135623730951;
+        	} else {
+        		this.myPlayer.acc.x -= Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.y -= Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        	}
+        }
+        else if (this.input.isKeyDown("KeyD")) {
+        	if (playerVelNeedsDiv) {
+				this.myPlayer.acc.x *= 0.5;
+				this.myPlayer.acc.y *= 0.5;
+				this.myPlayer.acc.x += 0.5*Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.y += 0.5*Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.x *= 1.4142135623730951;
+				this.myPlayer.acc.y *= 1.4142135623730951;
+        	} else {
+        		this.myPlayer.acc.x += Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.y += Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        	}
+        }
+
+        if (this.input.isKeyDown("ArrowLeft")) this.myPlayer.rotAccX -= 0.015 * this.sensitivity;
+        if (this.input.isKeyDown("ArrowRight")) this.myPlayer.rotAccX += 0.015 * this.sensitivity;
+
+        this.myPlayer.pos.x += this.myPlayer.vel.x; // pos
+        this.myPlayer.pos.y += this.myPlayer.vel.y;
+        this.myPlayer.vel.x += this.myPlayer.acc.x; // vel
+        this.myPlayer.vel.y += this.myPlayer.acc.y;
+        this.myPlayer.vel.x *= 0.9;
+        this.myPlayer.vel.y *= 0.9;
+        this.myPlayer.acc.x = 0;                    // acc reset
+        this.myPlayer.acc.y = 0;
+
+        this.myPlayer.rotX = mod(this.myPlayer.rotX + this.myPlayer.rotVelX, 2*Math.PI); // rot pos
+        this.myPlayer.rotY = mod(this.myPlayer.rotY + this.myPlayer.rotVelY, 2*Math.PI);
+        this.myPlayer.rotVelX += this.myPlayer.rotAccX;                                  // rot vel
+        this.myPlayer.rotVelY += this.myPlayer.rotAccY;
+        this.myPlayer.rotVelX *= 0.8;
+        this.myPlayer.rotVelY *= 0.8;
+        this.myPlayer.rotAccX = 0;                                                       // rot acc reset
+        this.myPlayer.rotAccY = 0;                                                       // rot acc reset
+
+
+        if (this.input.isPointerLocked) {
+	        // Use raw deltas for camera view changes
+	        this.player.rotationY += this.input.mouse.moveX * this.sensitivity;
+	        this.player.rotationX += this.input.mouse.moveY * this.sensitivity;
+	    }
 
     	if (this.input.mouse.buttonsDown.has(0) || this.input.touches.size > 0) {
     		let canBRect = this.area.canvas.getBoundingClientRect();
@@ -367,14 +485,18 @@ class Game {
         const MAZE_START = new Point(100, 100);
         ctx.fillStyle = "#cdcd9a";
         ctx.fillRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE);
+        
+        // draw top down player on maze
         ctx.fillStyle = "#1e1e1e";
-        for (let i = 0; i < this.myMaze.width; i++) {
-        	for (let j = 0; j < this.myMaze.height; j++) {
-        		ctx.beginPath();
-        		ctx.arc(MAZE_START.x + (i+0.5) * MAZE_SCALE, MAZE_START.y + (j+0.5) * MAZE_SCALE, MAZE_SCALE*0.2, 0, Math.PI*2);
-        		ctx.fill();
-        	}
-        }
+        ctx.strokeStyle = "#ff1e1e";
+        ctx.lineWidth = "3";
+     	ctx.beginPath();
+		ctx.arc(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE, MAZE_SCALE*0.2, 0, Math.PI*2);
+		ctx.fill();
+		ctx.beginPath();
+		ctx.moveTo(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE);
+		ctx.lineTo(MAZE_START.x + (this.myPlayer.pos.x + Math.cos(this.myPlayer.rotX)) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y + Math.sin(this.myPlayer.rotX)) * MAZE_SCALE);
+		ctx.stroke();
 
     	ctx.strokeStyle = "#9a9acd";
     	ctx.lineWidth = "5";
@@ -385,10 +507,18 @@ class Game {
         	ctx.stroke();
         }
 
+        // draw test ray
+        // https://www.desmos.com/calculator/hj2kt8b8no
+        let temp_ray = this.myMaze.tree.raycast(this.myPlayer.pos, new Point(Math.cos(this.myPlayer.rotX),Math.sin(this.myPlayer.rotX)));
+        if (temp_ray != null) {
+	        ctx.fillStyle = "#1ebc1e";
+	        ctx.fillRect(MAZE_START.x + (temp_ray.point.x) * MAZE_SCALE - 5, MAZE_START.y + (temp_ray.point.y) * MAZE_SCALE - 5, 10, 10);
+	    }
+
         // Debug info
-        ctx.fillStyle = "white";
-        ctx.font = "60px monospace";
-        ctx.fillText(`R_FPS: ${this.currentRenderFPS.toFixed(0)}`, 10, 60);
+        // ctx.fillStyle = "white";
+        // ctx.font = "60px monospace";
+        // ctx.fillText(`R_FPS: ${this.currentRenderFPS.toFixed(0)}`, 10, 60);
         // let canBRect = this.area.canvas.getBoundingClientRect();
         // ctx.fillText(`Mouse: (${Math.round((this.input.getPointer().x - canBRect.left)*(ctx.width / canBRect.width))}, ${Math.round((this.input.getPointer().y - canBRect.top)*(ctx.height / canBRect.height))})`, 10, 40);
     }
