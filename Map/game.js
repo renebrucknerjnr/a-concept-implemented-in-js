@@ -429,6 +429,7 @@ class Game {
 
         // collision
         const num_collision_rays = 10;
+        const num_collision_rays_negOne = 1/num_collision_rays;
         for (let i = 0; i < num_collision_rays; i++) { // cast rays around the player and see how far you are from walls
         	let a = i / num_collision_rays * 2 * Math.PI;
         	let d = new Point(Math.cos(a), Math.sin(a));
@@ -436,8 +437,8 @@ class Game {
 
         	if (cast != null && cast.t <= this.myPlayer.radius) {
         		// let d2 = new Point(cast.point.x - this.myPlayer.pos.x, cast.point.y - this.myPlayer.pos.y)
-        		this.myPlayer.pos.x -= d.x*cast.t*0.1;
-        		this.myPlayer.pos.y -= d.y*cast.t*0.1;
+        		this.myPlayer.pos.x -= d.x*cast.t*num_collision_rays_negOne;
+        		this.myPlayer.pos.y -= d.y*cast.t*num_collision_rays_negOne;
         		this.myPlayer.vel.x *= Math.abs(d.y); // this wall sliding does not take into accoun what angle the wall is at (axis-aligned walls only)
         		this.myPlayer.vel.y *= Math.abs(d.x);
         	}
@@ -498,8 +499,8 @@ class Game {
         ctx.clearRect(0, 0, ctx.width, ctx.height);
 
         // Draw top down maze
-        const MAZE_SCALE = 90;
-        const MAZE_START = new Point(100, 100);
+        const MAZE_SCALE = 50;
+        const MAZE_START = new Point(this.area.canvas.width - MAZE_SCALE*this.myMaze.width - 10, 10);
         ctx.fillStyle = "#cdcd9a";
         ctx.fillRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE);
         
@@ -524,13 +525,45 @@ class Game {
         	ctx.stroke();
         }
 
-        // draw test ray
-        // https://www.desmos.com/calculator/hj2kt8b8no
-        let temp_ray = this.myMaze.tree.raycast(this.myPlayer.pos, new Point(Math.cos(this.myPlayer.rotX),Math.sin(this.myPlayer.rotX)));
-        if (temp_ray != null) {
-	        ctx.fillStyle = "#1ebc1e";
-	        ctx.fillRect(MAZE_START.x + (temp_ray.point.x) * MAZE_SCALE - 5, MAZE_START.y + (temp_ray.point.y) * MAZE_SCALE - 5, 10, 10);
-	    }
+        // raycast scene
+        // https://www.desmos.com/notebook/jequqkbjby
+        // fixed x, fish-eye-fixed, stereographic projection
+        const FOV = 90;
+        const RAY_NUMBER = 100;
+
+        const FOV_RAD = FOV * Math.PI / 180;
+        const FOV_RAD_2 = FOV_RAD * 0.5;
+        const DELTA_FOV = FOV_RAD / RAY_NUMBER;
+        const SCREEN_WIDTH = this.area.canvas.width;
+        const SCREEN_HEIGHT = this.area.canvas.height;
+        const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
+        const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
+        // let lineX = F * Math.tan(rayAngDiffCenter);
+
+        for (let i = 0; i < RAY_NUMBER; i++) {
+        	const rayAng = this.myPlayer.rotX - FOV_RAD_2 + i * DELTA_FOV;
+
+        	const dir = new Point(
+        		Math.cos(rayAng),
+        		Math.sin(rayAng)
+        	);
+
+        	let cast = this.myMaze.tree.raycast(
+        		this.myPlayer.pos,
+        		dir
+        	);
+
+        	if (cast != null) {
+        		const angDiff = rayAng - this.myPlayer.rotX;
+        		const dist = cast.t * Math.cos(angDiff);
+        		const H = F / dist;
+
+        		const x = i * BAR_WIDTH;
+        		const y = (SCREEN_HEIGHT - H) * 0.5;
+
+        		ctx.fillRect(x, y, BAR_WIDTH, H);
+        	}
+        }
 
         // Debug info
         // ctx.fillStyle = "white";

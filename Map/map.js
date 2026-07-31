@@ -29,6 +29,7 @@ function rayRect(origin, dir, rect, maxT = Infinity) {
     return Math.max(0, tmin);
 }
 
+// https://www.desmos.com/calculator/hj2kt8b8no
 function raySegment(origin, dir, segment) {
 	// if (dir.x > 0 && (origin.x > segment.p1.x && origin.x > segment.p2.x)) return null; // ray goes right and segment is left
 	// if (dir.x < 0 && (origin.x < segment.p1.x && origin.x < segment.p2.x)) return null; // ray goes left and segment is right
