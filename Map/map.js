@@ -9,18 +9,94 @@ function project(point, dir) {
     return point.x * dir.x + point.y * dir.y;
 }
 
+function rayRect(origin, dir, rect, maxT = Infinity) {
+    let tx1 = (rect.min.x - origin.x) / dir.x;
+    let tx2 = (rect.max.x - origin.x) / dir.x;
+
+    let tmin = Math.min(tx1, tx2);
+    let tmax = Math.max(tx1, tx2);
+
+    let ty1 = (rect.min.y - origin.y) / dir.y;
+    let ty2 = (rect.max.y - origin.y) / dir.y;
+
+    tmin = Math.max(tmin, Math.min(ty1, ty2));
+    tmax = Math.min(tmax, Math.max(ty1, ty2));
+
+    if (tmax < 0) return null;
+    if (tmin > tmax) return null;
+    if (tmin > maxT) return null;
+
+    return Math.max(0, tmin);
+}
+
+function raySegment(origin, dir, segment) {
+	// if (dir.x > 0 && (origin.x > segment.p1.x && origin.x > segment.p2.x)) return null; // ray goes right and segment is left
+	// if (dir.x < 0 && (origin.x < segment.p1.x && origin.x < segment.p2.x)) return null; // ray goes left and segment is right
+	// if (dir.y > 0 && (origin.y > segment.p1.y && origin.y > segment.p2.y)) return null; // ray goes up and segment is down
+	// if (dir.y < 0 && (origin.y < segment.p1.y && origin.y < segment.p2.y)) return null; // ray goes down and segment is up
+
+	// let dist1 = Math.sqrt((origin.x - segment.p1.x)**2 + (origin.y - segment.p1.y)**2);
+	// let dist2 = Math.sqrt((origin.x - segment.p2.x)**2 + (origin.y - segment.p2.y)**2);
+	// let dist = Math.max(dist1,dist2);
+	// let ray = new Segment(origin, new Point(origin.x + dir.x * dist * 2, origin.y + dir.y * dist * 2));
+	// let inter = ray.intersect(segment);
+
+	// const t = Math.hypot(
+	//     inter.x - origin.x,
+	//     inter.y - origin.y
+	// ); // world space, not along line?
+
+	// if (!inter.hit) return null;
+
+	// return {
+	//     t: t,                        // distance along ray
+	//     point: new Point(inter.x, inter.y) // intersection point
+	// };
+
+
+
+	const sx = segment.p2.x - segment.p1.x;
+    const sy = segment.p2.y - segment.p1.y;
+
+    const det = dir.x * sy - dir.y * sx;
+
+    if (Math.abs(det) < 1e-10)
+        return null;
+
+    const dx = segment.p1.x - origin.x;
+    const dy = segment.p1.y - origin.y;
+
+    const t = (dx * sy - dy * sx) / det;
+    const u = (dx * dir.y - dy * dir.x) / det;
+
+    if (t < 0)
+        return null;
+
+    if (u < 0 || u > 1)
+        return null;
+
+    return {
+        t,
+        point: new Point(
+            origin.x + t * dir.x,
+            origin.y + t * dir.y
+        )
+    };
+}
+
 
 class Maze {
-	constructor(w, h, cellW = 1, cellH = 1) {
+	constructor(w, h) {
 		this.width = w;
 		this.height = h;
 		this.width += (1-this.width % 2); // add one if needed (to make width an odd number)
 		this.height += (1-this.height % 2);
 
-		this.cellWidth = cellW;
-		this.cellHeight = cellH;
+		this.segments = null;
 
 		this.generate(0.1);
+		this.tree = new QuadTree(new Rect(new Point(0,0), new Point(this.width, this.height)));
+		this.tree.insertAll(this.segments);
 	}
 
 	_mergeSegments() {
@@ -354,7 +430,7 @@ class Quad {
     }
 
     insert(segment) {
-        if (!this.bounds.intersectsRect(segment.bounds))
+        if (!this.bounds.intersectRect(segment.bounds))
             return false;
 
         if (this.children) {
@@ -379,11 +455,11 @@ class Quad {
     }
 
     query(rect, out = []) {
-        if (!this.bounds.intersectsRect(rect))
+        if (!this.bounds.intersectRect(rect))
             return out;
 
         for (const seg of this.items) {
-            if (rectIntersectsRect(seg.bounds, rect))
+            if (seg.bounds.intersectRect(rect))
                 out.push(seg);
         }
 
@@ -394,6 +470,58 @@ class Quad {
 
         return out;
     }
+
+    raycast(origin, dir, best = null) {
+	    const maxT = best ? best.t : Infinity;
+
+	    const entry = rayRect(origin, dir, this.bounds, maxT);
+
+	    if (entry === null)
+	        return best;
+
+	    // Test segments stored in this node.
+	    for (const seg of this.items) {
+
+	        const hit = raySegment(origin, dir, seg);
+
+	        if (!hit)
+	            continue;
+
+	        if (!best || hit.t < best.t) {
+	            best = {
+	                t: hit.t,
+	                point: hit.point,
+	                segment: seg
+	            };
+	        }
+	    }
+
+	    if (!this.children)
+	        return best;
+
+	    // Visit children nearest-first.
+	    const order = [];
+
+	    for (const child of this.children) {
+
+	        const t = rayRect(
+	            origin,
+	            dir,
+	            child.bounds,
+	            best ? best.t : Infinity
+	        );
+
+	        if (t !== null)
+	            order.push({ child, t });
+	    }
+
+	    order.sort((a, b) => a.t - b.t); // slow, faster to manually check the order
+
+	    for (const item of order)
+	        best = item.child.raycast(origin, dir, best);
+
+	    return best;
+	}
 
     clear() {
         this.items.length = 0;
@@ -428,4 +556,8 @@ class QuadTree {
     query(rect) {
         return this.root.query(rect);
     }
+
+    raycast(origin, dir) {
+	    return this.root.raycast(origin, dir);
+	}
 }
