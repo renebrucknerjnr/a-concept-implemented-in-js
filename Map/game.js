@@ -313,7 +313,8 @@ class Game {
     					 rotVelX: 0,
     					 rotVelY: 0,
     					 rotAccX: 0,
-    					 rotAccY: 0};
+    					 rotAccY: 0,
+    					 radius: 0.2};
 
         // Timing
         this.lastTime = 0;
@@ -426,6 +427,22 @@ class Game {
         this.myPlayer.acc.x = 0;                    // acc reset
         this.myPlayer.acc.y = 0;
 
+        // collision
+        const num_collision_rays = 10;
+        for (let i = 0; i < num_collision_rays; i++) { // cast rays around the player and see how far you are from walls
+        	let a = i / num_collision_rays * 2 * Math.PI;
+        	let d = new Point(Math.cos(a), Math.sin(a));
+        	let cast = this.myMaze.tree.raycast(this.myPlayer.pos, d);
+
+        	if (cast != null && cast.t <= this.myPlayer.radius) {
+        		// let d2 = new Point(cast.point.x - this.myPlayer.pos.x, cast.point.y - this.myPlayer.pos.y)
+        		this.myPlayer.pos.x -= d.x*cast.t*0.1;
+        		this.myPlayer.pos.y -= d.y*cast.t*0.1;
+        		this.myPlayer.vel.x *= Math.abs(d.y); // this wall sliding does not take into accoun what angle the wall is at (axis-aligned walls only)
+        		this.myPlayer.vel.y *= Math.abs(d.x);
+        	}
+        }
+
         this.myPlayer.rotX = mod(this.myPlayer.rotX + this.myPlayer.rotVelX, 2*Math.PI); // rot pos
         this.myPlayer.rotY = mod(this.myPlayer.rotY + this.myPlayer.rotVelY, 2*Math.PI);
         this.myPlayer.rotVelX += this.myPlayer.rotAccX;                                  // rot vel
@@ -491,7 +508,7 @@ class Game {
         ctx.strokeStyle = "#ff1e1e";
         ctx.lineWidth = "3";
      	ctx.beginPath();
-		ctx.arc(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE, MAZE_SCALE*0.2, 0, Math.PI*2);
+		ctx.arc(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE, MAZE_SCALE*this.myPlayer.radius, 0, Math.PI*2);
 		ctx.fill();
 		ctx.beginPath();
 		ctx.moveTo(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE);
