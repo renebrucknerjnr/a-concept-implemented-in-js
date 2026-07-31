@@ -1,3 +1,15 @@
+function areCollinear(seg1, seg2) {
+    return (
+        isCollinear(seg1.p1, seg1.p2, seg2.p1) &&
+        isCollinear(seg1.p1, seg1.p2, seg2.p2)
+    );
+}
+
+function project(point, dir) {
+    return point.x * dir.x + point.y * dir.y;
+}
+
+
 class Maze {
 	constructor(w, h, cellW = 1, cellH = 1) {
 		this.width = w;
@@ -11,31 +23,93 @@ class Maze {
 		this.generate(0.1);
 	}
 
-	_mergeSegmentsYAxis() {
+	_mergeSegments() {
 	    let result = [];
+	    let anythingDone = false;
+	    const EPSILON = 1e-10;
 
 	    for (let s of this.segments) {
 	        let merged = false;
 
 	        for (let r of result) {
-	            // same y, touching horizontally
-	            if (
-	                r.p1.y === r.p2.y &&
-	                s.p1.y === s.p2.y &&
-	                r.p1.y === s.p1.y
-	            ) {
-	                let min1 = Math.min(r.p1.x, r.p2.x);
-	                let max1 = Math.max(r.p1.x, r.p2.x);
+	            if (areCollinear(r, s)) {
+				    const dir = {
+				        x: r.p2.x - r.p1.x,
+				        y: r.p2.y - r.p1.y
+				    };
 
-	                let min2 = Math.min(s.p1.x, s.p2.x);
-	                let max2 = Math.max(s.p1.x, s.p2.x);
+				    const r1 = project(r.p1, dir);
+				    const r2 = project(r.p2, dir);
+				    const s1 = project(s.p1, dir);
+				    const s2 = project(s.p2, dir);
 
-	                if (max1 >= min2 && max2 >= min1) {
-	                    r.p1.x = Math.min(min1, min2);
-	                    r.p2.x = Math.max(max1, max2);
-	                    merged = true;
-	                    break;
-	                }
+				    // const rMin = Math.min(r1, r2);
+				    // const rMax = Math.max(r1, r2);
+				    // const sMin = Math.min(s1, s2);
+				    // const sMax = Math.max(s1, s2);
+
+				    // if (rMax >= sMin && sMax >= rMin) {
+				    //     // merge...
+	                    // const endpoints = [r.p1, r.p2, s.p1, s.p2];
+
+					// 	let start = endpoints[0];
+					// 	let end = endpoints[0];
+
+					// 	let startProj = project(start, dir);
+					// 	let endProj = startProj;
+
+					// 	for (const p of endpoints) {
+					// 	    const proj = project(p, dir);
+
+					// 	    if (proj < startProj) {
+					// 	        start = p;
+					// 	        startProj = proj;
+					// 	    }
+
+					// 	    if (proj > endProj) {
+					// 	        end = p;
+					// 	        endProj = proj;
+					// 	    }
+					// 	}
+
+					// 	r.p1 = start;
+					// 	r.p2 = end;
+					// 	merged = true;
+					// 	break;
+	                // }
+	                
+	                const endpoints = [
+					    { p: r.p1, proj: project(r.p1, dir) },
+					    { p: r.p2, proj: project(r.p2, dir) },
+					    { p: s.p1, proj: project(s.p1, dir) },
+					    { p: s.p2, proj: project(s.p2, dir) }
+					];
+	                const rMin = Math.min(endpoints[0].proj, endpoints[1].proj);
+					const rMax = Math.max(endpoints[0].proj, endpoints[1].proj);
+					const sMin = Math.min(endpoints[2].proj, endpoints[3].proj);
+					const sMax = Math.max(endpoints[2].proj, endpoints[3].proj);
+
+					if (rMax + EPSILON >= sMin && sMax + EPSILON >= rMin) {
+					    endpoints.sort((a, b) => a.proj - b.proj);
+
+					    r.p1 = endpoints[0].p;
+					    r.p2 = endpoints[3].p;
+
+					    // let start = endpoints[0];
+						// let end = endpoints[0];
+
+						// for (const ep of endpoints) {
+						//     if (ep.proj < start.proj) start = ep;
+						//     if (ep.proj > end.proj) end = ep;
+						// }
+
+						// r.p1 = start.p;
+						// r.p2 = end.p;
+
+						anythingDone = true;
+					    merged = true;
+					    break;
+					}
 	            }
 	        }
 
@@ -44,41 +118,7 @@ class Maze {
 	    }
 
 	    this.segments = result;
-	}
-
-	_mergeSegmentsXAxis() {
-	    let result = [];
-
-	    for (let s of this.segments) {
-	        let merged = false;
-
-	        for (let r of result) {
-	            // same x, touching horizontally
-	            if (
-	                r.p1.x === r.p2.x &&
-	                s.p1.x === s.p2.x &&
-	                r.p1.x === s.p1.x
-	            ) {
-	                let min1 = Math.min(r.p1.y, r.p2.y);
-	                let max1 = Math.max(r.p1.y, r.p2.y);
-
-	                let min2 = Math.min(s.p1.y, s.p2.y);
-	                let max2 = Math.max(s.p1.y, s.p2.y);
-
-	                if (max1 >= min2 && max2 >= min1) {
-	                    r.p1.y = Math.min(min1, min2);
-	                    r.p2.y = Math.max(max1, max2);
-	                    merged = true;
-	                    break;
-	                }
-	            }
-	        }
-
-	        if (!merged)
-	            result.push(s);
-	    }
-
-	    this.segments = result;
+	    return anythingDone;
 	}
 
 	_removeOneLongSegments() {
@@ -198,7 +238,7 @@ class Maze {
 		}
 	}
 		
-	generate(removeRandomWalls = 50) { // generate maze from segments using recursive division (related: BSP)
+	generate(removeRandomWalls = 0) { // generate maze from segments using recursive division (related: BSP)
 		if (this.width <= 2 && this.height <= 2) return;
 
 		this.segments = new Array();
@@ -211,12 +251,11 @@ class Maze {
 
 		this._gen(0,0, this.width, this.height, 0);
 
-		for (let i = 0; i < removeRandomWalls; i++) {
+		for (let i = 0; i < removeRandomWalls * (this.width * this.height * 0.8); i++) {
 			this._removeRandomSegment();
 		}
 
-		this._mergeSegmentsXAxis();
-		this._mergeSegmentsYAxis();
+		while (this._mergeSegments()) {}
 		this._removeOneLongSegments();
 	}
 }
