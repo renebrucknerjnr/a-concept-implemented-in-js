@@ -305,7 +305,7 @@ class Game {
     	// the maze
     	this.sensitivity = 1.0;
     	this.myMaze = new Maze(10, 10);
-    	this.myPlayer = {pos: new Point(0.5,0.5),  // world pos
+    	this.myPlayer = {pos: new Point(8.5,7.5),  // world pos
     					 vel: new Point(0,0),  // velocity
     					 acc: new Point(0,0),  // acceleration
     					 rotX: 0.7853981633974483,
@@ -376,6 +376,8 @@ class Game {
     	this.currentUpdateFPS = 1 / dt;
         
         // if (this.input.isKeyDown("KeyW") || this.input.isKeyDown("ArrowUp")) this.player.d = 3;
+
+        if (this.input.isKeyDown("KeyQ")) throw "Q was pressed, forced stop initiated :)";
 
     	// update player
     	let playerVelNeedsDiv = false;
