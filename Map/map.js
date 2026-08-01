@@ -10,23 +10,50 @@ function project(point, dir) {
 }
 
 function rayRect(origin, dir, rect, maxT = Infinity) {
-    let tx1 = (rect.min.x - origin.x) / dir.x;
-    let tx2 = (rect.max.x - origin.x) / dir.x;
+    let tx1, tx2;
 
-    let tmin = Math.min(tx1, tx2);
-    let tmax = Math.max(tx1, tx2);
+    if (dir.x === 0) {
+        if (origin.x < rect.min.x || origin.x > rect.max.x)
+            return null;
 
-    let ty1 = (rect.min.y - origin.y) / dir.y;
-    let ty2 = (rect.max.y - origin.y) / dir.y;
+        tx1 = -Infinity;
+        tx2 = Infinity;
+    } else {
+        tx1 = (rect.min.x - origin.x) / dir.x;
+        tx2 = (rect.max.x - origin.x) / dir.x;
+    }
 
-    tmin = Math.max(tmin, Math.min(ty1, ty2));
-    tmax = Math.min(tmax, Math.max(ty1, ty2));
+    let ty1, ty2;
+
+    if (dir.y === 0) {
+        if (origin.y < rect.min.y || origin.y > rect.max.y)
+            return null;
+
+        ty1 = -Infinity;
+        ty2 = Infinity;
+    } else {
+        ty1 = (rect.min.y - origin.y) / dir.y;
+        ty2 = (rect.max.y - origin.y) / dir.y;
+    }
+
+    let tmin = Math.max(
+        Math.min(tx1, tx2),
+        Math.min(ty1, ty2)
+    );
+
+    let tmax = Math.min(
+        Math.max(tx1, tx2),
+        Math.max(ty1, ty2)
+    );
 
     if (tmax < 0) return null;
     if (tmin > tmax) return null;
-    if (tmin > maxT) return null;
 
-    return Math.max(0, tmin);
+    const entry = Math.max(0, tmin);
+
+    if (entry > maxT) return null;
+
+    return entry;
 }
 
 // https://www.desmos.com/calculator/hj2kt8b8no
@@ -61,7 +88,7 @@ function raySegment(origin, dir, segment) {
 
     const det = dir.x * sy - dir.y * sx;
 
-    if (Math.abs(det) < 1e-10)
+    if (Math.abs(det) < 1e-7)
         return null;
 
     const dx = segment.p1.x - origin.x;
@@ -85,6 +112,28 @@ function raySegment(origin, dir, segment) {
     };
 }
 
+function countQuad(node) {
+    let total = node.items.length;
+
+    if (node.children)
+        for (const child of node.children)
+            total += countQuad(child);
+
+    return total;
+}
+
+function verifyQuad(node) {
+    for (const seg of node.items) {
+        if (!node.bounds.containsRect(seg.bounds)) {
+            console.log("Segment stored outside node!", node.depth, seg);
+        }
+    }
+
+    if (node.children)
+        for (const child of node.children)
+            verifyQuad(child);
+}
+
 
 class Maze {
 	constructor(w, h) {
@@ -98,6 +147,8 @@ class Maze {
 		this.generate(0.1);
 		this.tree = new QuadTree(new Rect(new Point(0,0), new Point(this.width, this.height)));
 		this.tree.insertAll(this.segments);
+
+	    verifyQuad(this.tree.root);
 	}
 
 	_mergeSegments() {
@@ -208,7 +259,7 @@ class Maze {
 		this.segments = result;
 	}
 
-	_gen(x,y,w,h,i) {
+	_gen(x,y,w,h,i, hashIndex=0) {
 		// if (i >= 2) return;
 
 		let horizontal = (h >= 2); // is the sub-map large enough to split with horizontal line
@@ -221,7 +272,8 @@ class Maze {
 
 		if (!horizontal && !vertical) return; // no to both? stop recursion
 		else if (horizontal && vertical)
-			horizontal = (h == w ? (secureRandomFloat() < 0.5) : (h > w ? true : false)); // yes to both? choose the larger one
+			// horizontal = (h == w ? (secureRandomFloat() < 0.5) : (h > w ? true : false)); // yes to both? choose the larger one
+			horizontal = (h == w ? (hash12(hashIndex, hashIndex*5) < 0.5) : (h > w ? true : false)); // yes to both? choose the larger one
 			// horizontal = (secureRandomFloat() < 0.5); // yes to both? randomly choose
 
 		if (horizontal) { // split with horizontal line (—) (decreases height while width stays the same)
@@ -230,7 +282,8 @@ class Maze {
 			let X2 = x+w;
 
 			// cut position (how high)
-			let Y = y + Math.floor(secureRandomFloat() * (h - 2)) + 1;
+			// let Y = y + Math.floor(secureRandomFloat() * (h - 2)) + 1;
+			let Y = y + Math.floor(hash12(hashIndex, hashIndex*6) * (h - 2)) + 1;
 			let H1 = Y - y;
 			let H2 = h - H1;
 
@@ -238,7 +291,8 @@ class Maze {
 			let p2 = new Point(X2, Y);
 
 			// door (how far along cut)
-			let D = Math.floor(secureRandomFloat() * w);
+			// let D = Math.floor(secureRandomFloat() * w);
+			let D = Math.floor(hash12(hashIndex, hashIndex*7) * w);
 			if (D > 0) {
 				let p3 = new Point(X1 + D, Y);
 				this.segments.push(new Segment(p1, p3));
@@ -249,8 +303,8 @@ class Maze {
 			}
 
 			// continue to the next rooms
-			this._gen(x, y, w, H1, i+1);
-			this._gen(x, Y, w, H2, i+1);
+			this._gen(x, y, w, H1, i+1, hashIndex+this.width);
+			this._gen(x, Y, w, H2, i+1, hashIndex+this.width);
 
 		} else { // vertical | (when not horizontal)
 			// fixed points
@@ -258,7 +312,8 @@ class Maze {
 			let Y2 = y+h;
 
 			// cut position (left to right)
-			let X = x + Math.floor(secureRandomFloat() * (w - 1)) + 1;
+			// let X = x + Math.floor(secureRandomFloat() * (w - 1)) + 1;
+			let X = x + Math.floor(hash12(hashIndex, hashIndex*8) * (w - 1)) + 1;
 			let W1 = X - x;
 			let W2 = w - W1;
 
@@ -266,7 +321,8 @@ class Maze {
 			let p2 = new Point(X, Y2);
 
 			// door
-			let D = Math.floor(secureRandomFloat() * h);
+			// let D = Math.floor(secureRandomFloat() * h);
+			let D = Math.floor(hash12(hashIndex, hashIndex*9) * h);
 			if (D > 0) {
 				let p3 = new Point(X, Y1 + D);
 				this.segments.push(new Segment(p1, p3));
@@ -277,21 +333,23 @@ class Maze {
 			}
 
 			// recursion into the next rooms
-			this._gen(x, y, W1, h, i+1);
-			this._gen(X, y, W2, h, i+1);
+			this._gen(x, y, W1, h, i+1, hashIndex+this.width);
+			this._gen(X, y, W2, h, i+1, hashIndex+this.width);
 		}
 	}
 
-	_removeRandomSegment() {
+	_removeRandomSegment(hashIndex=0) {
 		if (this.segments.length < 3) return;
-		let ri0 = Math.floor(secureRandomFloat()*this.segments.length);
+		// let ri0 = Math.floor(secureRandomFloat()*this.segments.length);
+		let ri0 = Math.floor(hash12(hashIndex, hashIndex*2)*this.segments.length);
 		let seg = this.segments[ri0];
 		this.segments.splice(ri0, 1); // remove it
 		
 		if (seg.p1.x > seg.p2.x || seg.p2.x > seg.p1.x) { // segment is vertical (|)
 			let l = seg.p2.y - seg.p1.y;
 			
-			let D = Math.floor(secureRandomFloat() * l);
+			// let D = Math.floor(secureRandomFloat() * l);
+			let D = Math.floor(hash12(hashIndex, hashIndex*3) * l);
 			if (D > 0) {
 				let p3 = new Point(seg.p1.x, seg.p1.y + D);
 				this.segments.push(new Segment(seg.p1, p3));
@@ -304,7 +362,8 @@ class Maze {
 		} else { // segment is horizontal
 			let l = seg.p2.x - seg.p1.x;
 			
-			let D = Math.floor(secureRandomFloat() * l);
+			// let D = Math.floor(secureRandomFloat() * l);
+			let D = Math.floor(hash12(hashIndex, hashIndex*4) * l);
 			if (D > 0) {
 				let p3 = new Point(seg.p1.x + D, seg.p1.y);
 				this.segments.push(new Segment(p1, p3));
@@ -329,10 +388,10 @@ class Maze {
 		this.segments = new Array();
 
 
-		this._gen(0,0, this.width, this.height, 0);
+		this._gen(0,0, this.width, this.height, 0, removeRandomWalls);
 
 		for (let i = 0; i < removeRandomWalls * (this.width * this.height * 0.8); i++) {
-			this._removeRandomSegment();
+			this._removeRandomSegment(i);
 		}
 
 		this._addBoundry();
@@ -431,7 +490,7 @@ class Quad {
     }
 
     insert(segment) {
-        if (!this.bounds.intersectRect(segment.bounds))
+        if (!this.bounds.intersectRect(segment.bounds).hit)
             return false;
 
         if (this.children) {
@@ -456,11 +515,11 @@ class Quad {
     }
 
     query(rect, out = []) {
-        if (!this.bounds.intersectRect(rect))
+        if (!this.bounds.intersectRect(rect).hit)
             return out;
 
         for (const seg of this.items) {
-            if (seg.bounds.intersectRect(rect))
+            if (seg.bounds.intersectRect(rect).hit)
                 out.push(seg);
         }
 
@@ -473,6 +532,15 @@ class Quad {
     }
 
     raycast(origin, dir, best = null) {
+    	// console.log(
+		//     "depth",
+		//     this.depth,
+		//     "items",
+		//     this.items.length,
+		//     "children",
+		//     !!this.children
+		// );
+
 	    const maxT = best ? best.t : Infinity;
 
 	    const entry = rayRect(origin, dir, this.bounds, maxT);
@@ -482,13 +550,12 @@ class Quad {
 
 	    // Test segments stored in this node.
 	    for (const seg of this.items) {
-
-	        const hit = raySegment(origin, dir, seg);
+	    	const hit = raySegment(origin, dir, seg);
 
 	        if (!hit)
 	            continue;
 
-	        if (!best || hit.t <= best.t) {
+	        if (!best || hit.t < best.t) {
 	            best = {
 	                t: hit.t,
 	                point: hit.point,
@@ -504,7 +571,6 @@ class Quad {
 	    const order = [];
 
 	    for (const child of this.children) {
-
 	        const t = rayRect(
 	            origin,
 	            dir,

@@ -315,7 +315,7 @@ class Game {
     					 rotAccX: 0,
     					 rotAccY: 0,
     					 radius: 0.2};
-    	this.drawMiniMap = false;
+    	this.drawMiniMap = true;
 
         // Timing
         this.lastTime = 0;
@@ -527,6 +527,13 @@ class Game {
         		dir
         	);
 
+        	// Test if quad tree is really the problem
+        	// let cast = {t: Infinity, point: new Point(0,0)};
+        	// for (const s of this.myMaze.segments) {
+        	// 	let d = raySegment(this.myPlayer.pos, dir, s);
+        	// 	if (d != null && cast.t > d.t) cast = d;
+        	// }
+
         	if (cast != null) {
         		const angDiff = rayAng - this.myPlayer.rotX;
         		const dist = cast.t * Math.cos(angDiff);
@@ -582,6 +589,23 @@ class Game {
 	        	ctx.moveTo(s.p1.x * MAZE_SCALE + MAZE_START.x, s.p1.y * MAZE_SCALE + MAZE_START.y);
 	        	ctx.lineTo(s.p2.x * MAZE_SCALE + MAZE_START.x, s.p2.y * MAZE_SCALE + MAZE_START.y);
 	        	ctx.stroke();
+	        }
+
+	        // draw quad tree
+	        let i = 0;
+	        let bounds = [this.myMaze.tree.root];
+	        while (true) {
+	        	if (bounds[i] == undefined) break;
+	        	if (bounds[i].children != null) {
+	        		for (let j = 0; j < bounds[i].children.length; j++) {
+	        			bounds.push(bounds[i].children[j]);
+	        		}
+	        	}
+	        	i++;
+	        }
+	        for (let i = 0; i < bounds.length; i++) {
+	        	ctx.strokeStyle = `rgba(${floor(i/bounds.length * 255)},100,100, 0.5)`;
+				ctx.strokeRect(MAZE_START.x + (bounds[i].bounds.min.x) * MAZE_SCALE, MAZE_START.y + (bounds[i].bounds.min.y) * MAZE_SCALE, (bounds[i].bounds.max.x - bounds[i].bounds.min.x) * MAZE_SCALE, (bounds[i].bounds.max.y - bounds[i].bounds.min.y) * MAZE_SCALE);
 	        }
 	    }
 
