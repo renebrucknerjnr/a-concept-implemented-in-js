@@ -398,6 +398,15 @@ class Maze {
 		while (this._mergeSegments()) {}
 		this._removeOneLongSegments();
 	}
+
+	bruteForceRaycast(origin, dir) {
+		let cast = {t: Infinity, point: new Point(0,0), segment: null};
+    	for (const s of this.segments) {
+    		let d = raySegment(origin, dir, s);
+    		if (d != null && cast.t > d.t) cast = {t: d.t, point: d.point, segment: s};
+    	}
+    	return cast;
+	}
 }
 
 

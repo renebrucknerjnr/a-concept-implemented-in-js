@@ -530,11 +530,7 @@ class Game {
         	);
 
         	// Test if quad tree is really the problem
-        	// let cast = {t: Infinity, point: new Point(0,0)};
-        	// for (const s of this.myMaze.segments) {
-        	// 	let d = raySegment(this.myPlayer.pos, dir, s);
-        	// 	if (d != null && cast.t > d.t) cast = d;
-        	// }
+        	// let cast = this.myMaze.bruteForceRaycast(this.myPlayer.pos, dir);
 
         	if (cast != null) {
         		const angDiff = rayAng - this.myPlayer.rotX;
