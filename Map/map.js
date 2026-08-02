@@ -9,51 +9,89 @@ function project(point, dir) {
     return point.x * dir.x + point.y * dir.y;
 }
 
-function rayRect(origin, dir, rect, maxT = Infinity) {
-    let tx1, tx2;
+// function rayRect(origin, dir, rect, maxT = Infinity) {
+//     let tx1, tx2;
 
-    if (dir.x === 0) {
-        if (origin.x < rect.min.x || origin.x > rect.max.x)
-            return null;
+//     if (dir.x === 0) {
+//         if (origin.x < rect.min.x || origin.x > rect.max.x)
+//             return null;
 
-        tx1 = -Infinity;
-        tx2 = Infinity;
-    } else {
-        tx1 = (rect.min.x - origin.x) / dir.x;
-        tx2 = (rect.max.x - origin.x) / dir.x;
+//         tx1 = -Infinity;
+//         tx2 = Infinity;
+//     } else {
+//         tx1 = (rect.min.x - origin.x) / dir.x;
+//         tx2 = (rect.max.x - origin.x) / dir.x;
+//     }
+
+//     let ty1, ty2;
+
+//     if (dir.y === 0) {
+//         if (origin.y < rect.min.y || origin.y > rect.max.y)
+//             return null;
+
+//         ty1 = -Infinity;
+//         ty2 = Infinity;
+//     } else {
+//         ty1 = (rect.min.y - origin.y) / dir.y;
+//         ty2 = (rect.max.y - origin.y) / dir.y;
+//     }
+
+//     let tmin = Math.max(
+//         Math.min(tx1, tx2),
+//         Math.min(ty1, ty2)
+//     );
+
+//     let tmax = Math.min(
+//         Math.max(tx1, tx2),
+//         Math.max(ty1, ty2)
+//     );
+
+//     if (tmax < 0) return null;
+//     if (tmin > tmax) return null;
+
+//     const entry = Math.max(0, tmin);
+
+//     if (entry > maxT) return null;
+
+//     return entry;
+// }
+
+function rayRect(origin, dir, bounds, maxT = Infinity) {
+    let tmin = (bounds.min.x - origin.x) / dir.x;
+    let tmax = (bounds.max.x - origin.x) / dir.x;
+
+    // If pointing left, swap entry and exit distances
+    if (dir.x < 0) {
+        const temp = tmin;
+        tmin = tmax;
+        tmax = temp;
     }
 
-    let ty1, ty2;
+    let tminY = (bounds.min.y - origin.y) / dir.y;
+    let tmaxY = (bounds.max.y - origin.y) / dir.y;
 
-    if (dir.y === 0) {
-        if (origin.y < rect.min.y || origin.y > rect.max.y)
-            return null;
-
-        ty1 = -Infinity;
-        ty2 = Infinity;
-    } else {
-        ty1 = (rect.min.y - origin.y) / dir.y;
-        ty2 = (rect.max.y - origin.y) / dir.y;
+    // If pointing up, swap entry and exit distances
+    if (dir.y < 0) {
+        const temp = tminY;
+        tminY = tmaxY;
+        tmaxY = temp;
     }
 
-    let tmin = Math.max(
-        Math.min(tx1, tx2),
-        Math.min(ty1, ty2)
-    );
+    // If the X and Y slabs don't overlap, the ray misses the box entirely
+    if ((tmin > tmaxY) || (tminY > tmax)) return null;
 
-    let tmax = Math.min(
-        Math.max(tx1, tx2),
-        Math.max(ty1, ty2)
-    );
+    // Find the true entry and exit points across both axes
+    if (tminY > tmin) tmin = tminY;
+    if (tmaxY < tmax) tmax = tmaxY;
 
-    if (tmax < 0) return null;
-    if (tmin > tmax) return null;
+    // If tmax is negative, the box is entirely behind the camera
+    if (tmax < 0) return null; 
 
-    const entry = Math.max(0, tmin);
+    // If the entry point is further than our closest hit, cull it
+    if (tmin > maxT) return null; 
 
-    if (entry > maxT) return null;
-
-    return entry;
+    // If we are inside the box (tmin < 0), distance to the box is effectively 0
+    return Math.max(0, tmin); 
 }
 
 // https://www.desmos.com/calculator/hj2kt8b8no
@@ -145,8 +183,6 @@ class Maze {
 		this.segments = null;
 
 		this.generate(0.1);
-		this.tree = new QuadTree(new Rect(new Point(0,0), new Point(this.width, this.height)));
-		this.tree.insertAll(this.segments);
 
 	    verifyQuad(this.tree.root);
 	}
@@ -397,6 +433,13 @@ class Maze {
 		this._addBoundry();
 		while (this._mergeSegments()) {}
 		this._removeOneLongSegments();
+
+		this._generateTree();
+	}
+
+	_generateTree() {
+		this.tree = new QuadTree(new Rect(new Point(0,0), new Point(this.width, this.height)));
+		this.tree.insertAll(this.segments);
 	}
 
 	bruteForceRaycast(origin, dir) {

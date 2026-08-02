@@ -457,10 +457,10 @@ class Game {
         this.myPlayer.rotAccY = 0;                                                       // rot acc reset
 
 
-        if (this.input.isPointerLocked) {
+        if (this.input.isPointerLocked) { // doesn't work on all devices? why?
 	        // Use raw deltas for camera view changes
-	        this.player.rotationY += this.input.mouse.moveX * this.sensitivity;
-	        this.player.rotationX += this.input.mouse.moveY * this.sensitivity;
+	        this.myPlayer.rotX += this.input.mouse.moveX * this.sensitivity * 0.005;
+	        this.myPlayer.rotY += this.input.mouse.moveY * this.sensitivity * 0.005;
 	    }
 
     	if (this.input.mouse.buttonsDown.has(0) || this.input.touches.size > 0) {
