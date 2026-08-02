@@ -226,8 +226,14 @@ class Point {
 
 class Rect {
     constructor(m1, m2) { // Point min, Point max
-        this.min = m1;
-        this.max = m2;
+        this.min = new Point(
+            Math.min(m1.x, m2.x), 
+            Math.min(m1.y, m2.y)
+        );
+        this.max = new Point(
+            Math.max(m1.x, m2.x), 
+            Math.max(m1.y, m2.y)
+        );
     }
 
     intersectSeg(seg) {
@@ -305,8 +311,10 @@ class Segment {
         let dx = this.p2.x - this.p1.x;
         let dy = this.p2.y - this.p1.y;
 
-        let t_xmin = float('-inf'), t_xmax = float('inf');
-        let t_ymin = float('-inf'), t_ymax = float('inf');
+        // let t_xmin = float('-inf'), t_xmax = float('inf');
+        // let t_ymin = float('-inf'), t_ymax = float('inf');
+        let t_xmin = Number.NEGATIVE_INFINITY, t_xmax = Number.POSITIVE_INFINITY;
+        let t_ymin = Number.NEGATIVE_INFINITY, t_ymax = Number.POSITIVE_INFINITY;
 
         // X-axis slab
         if (dx !== 0) {

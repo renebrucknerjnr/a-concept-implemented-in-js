@@ -9,89 +9,51 @@ function project(point, dir) {
     return point.x * dir.x + point.y * dir.y;
 }
 
-// function rayRect(origin, dir, rect, maxT = Infinity) {
-//     let tx1, tx2;
+function rayRect(origin, dir, rect, maxT = Infinity) {
+    let tx1, tx2;
 
-//     if (dir.x === 0) {
-//         if (origin.x < rect.min.x || origin.x > rect.max.x)
-//             return null;
+    if (dir.x === 0) {
+        if (origin.x < rect.min.x || origin.x > rect.max.x)
+            return null;
 
-//         tx1 = -Infinity;
-//         tx2 = Infinity;
-//     } else {
-//         tx1 = (rect.min.x - origin.x) / dir.x;
-//         tx2 = (rect.max.x - origin.x) / dir.x;
-//     }
-
-//     let ty1, ty2;
-
-//     if (dir.y === 0) {
-//         if (origin.y < rect.min.y || origin.y > rect.max.y)
-//             return null;
-
-//         ty1 = -Infinity;
-//         ty2 = Infinity;
-//     } else {
-//         ty1 = (rect.min.y - origin.y) / dir.y;
-//         ty2 = (rect.max.y - origin.y) / dir.y;
-//     }
-
-//     let tmin = Math.max(
-//         Math.min(tx1, tx2),
-//         Math.min(ty1, ty2)
-//     );
-
-//     let tmax = Math.min(
-//         Math.max(tx1, tx2),
-//         Math.max(ty1, ty2)
-//     );
-
-//     if (tmax < 0) return null;
-//     if (tmin > tmax) return null;
-
-//     const entry = Math.max(0, tmin);
-
-//     if (entry > maxT) return null;
-
-//     return entry;
-// }
-
-function rayRect(origin, dir, bounds, maxT = Infinity) {
-    let tmin = (bounds.min.x - origin.x) / dir.x;
-    let tmax = (bounds.max.x - origin.x) / dir.x;
-
-    // If pointing left, swap entry and exit distances
-    if (dir.x < 0) {
-        const temp = tmin;
-        tmin = tmax;
-        tmax = temp;
+        tx1 = -Infinity;
+        tx2 = Infinity;
+    } else {
+        tx1 = (rect.min.x - origin.x) / dir.x;
+        tx2 = (rect.max.x - origin.x) / dir.x;
     }
 
-    let tminY = (bounds.min.y - origin.y) / dir.y;
-    let tmaxY = (bounds.max.y - origin.y) / dir.y;
+    let ty1, ty2;
 
-    // If pointing up, swap entry and exit distances
-    if (dir.y < 0) {
-        const temp = tminY;
-        tminY = tmaxY;
-        tmaxY = temp;
+    if (dir.y === 0) {
+        if (origin.y < rect.min.y || origin.y > rect.max.y)
+            return null;
+
+        ty1 = -Infinity;
+        ty2 = Infinity;
+    } else {
+        ty1 = (rect.min.y - origin.y) / dir.y;
+        ty2 = (rect.max.y - origin.y) / dir.y;
     }
 
-    // If the X and Y slabs don't overlap, the ray misses the box entirely
-    if ((tmin > tmaxY) || (tminY > tmax)) return null;
+    let tmin = Math.max(
+        Math.min(tx1, tx2),
+        Math.min(ty1, ty2)
+    );
 
-    // Find the true entry and exit points across both axes
-    if (tminY > tmin) tmin = tminY;
-    if (tmaxY < tmax) tmax = tmaxY;
+    let tmax = Math.min(
+        Math.max(tx1, tx2),
+        Math.max(ty1, ty2)
+    );
 
-    // If tmax is negative, the box is entirely behind the camera
-    if (tmax < 0) return null; 
+    if (tmax < 0) return null;
+    if (tmin > tmax) return null;
 
-    // If the entry point is further than our closest hit, cull it
-    if (tmin > maxT) return null; 
+    const entry = Math.max(0, tmin);
 
-    // If we are inside the box (tmin < 0), distance to the box is effectively 0
-    return Math.max(0, tmin); 
+    if (entry > maxT) return null;
+
+    return entry;
 }
 
 // https://www.desmos.com/calculator/hj2kt8b8no
@@ -184,13 +146,15 @@ class Maze {
 
 		this.generate(0.1);
 
+		// Neigther of these print, yet the bug persists
 	    verifyQuad(this.tree.root);
+	    if (countQuad(this.tree.root) != this.segments.length) console.log("segments are being lost or duplicated in QuadTree");
 	}
 
 	_mergeSegments() {
 	    let result = [];
 	    let anythingDone = false;
-	    const EPSILON = 1e-10;
+	    const EPSILON = 1e-7;
 
 	    for (let s of this.segments) {
 	        let merged = false;
@@ -270,6 +234,7 @@ class Maze {
 						// r.p1 = start.p;
 						// r.p2 = end.p;
 
+	        			r.computeBounds(); // this fixed the bug (the quadtree needed correct bounds to work properly, while the bruteforce didn't)
 						anythingDone = true;
 					    merged = true;
 					    break;
@@ -431,7 +396,7 @@ class Maze {
 		}
 
 		this._addBoundry();
-		while (this._mergeSegments()) {}
+		while (this._mergeSegments()) {} // commenting out this line removes the bug
 		this._removeOneLongSegments();
 
 		this._generateTree();
@@ -453,6 +418,8 @@ class Maze {
 }
 
 
+// the bug is most likely somewhere in rayRect, or the order array sorting logic
+// I know it's something to do with the quadtree, as bruteforcing it doesn't show the bug
 class Quad {
     constructor(bounds, capacity = 8, depth = 0, maxDepth = 10) {
         this.bounds = bounds;
@@ -584,15 +551,6 @@ class Quad {
     }
 
     raycast(origin, dir, best = null) {
-    	// console.log(
-		//     "depth",
-		//     this.depth,
-		//     "items",
-		//     this.items.length,
-		//     "children",
-		//     !!this.children
-		// );
-
 	    const maxT = best ? best.t : Infinity;
 
 	    const entry = rayRect(origin, dir, this.bounds, maxT);
