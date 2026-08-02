@@ -135,20 +135,22 @@ function verifyQuad(node) {
 }
 
 
+// TODO:  add different wall types
+// TODO:  add floor / ceiling tiles
+// TODO:  add entities
+// TODO:  maybe add doors (maybe)
+// TODO:  maybe beacons?
 class Maze {
-	constructor(w, h) {
+	constructor(w, h, hashIndex=0) {
 		this.width = w;
 		this.height = h;
 		this.width += (1-this.width % 2); // add one if needed (to make width an odd number)
 		this.height += (1-this.height % 2);
+		this.newGenHashIndex = hashIndex;
 
 		this.segments = null;
 
 		this.generate(0.1);
-
-		// Neigther of these print, yet the bug persists
-	    verifyQuad(this.tree.root);
-	    if (countQuad(this.tree.root) != this.segments.length) console.log("segments are being lost or duplicated in QuadTree");
 	}
 
 	_mergeSegments() {
@@ -383,20 +385,21 @@ class Maze {
 		this.segments.push(new Segment(new Point(0, this.height), new Point(0, 0)));
 	}
 		
-	generate(removeRandomWalls = 0) { // generate maze from segments using recursive division (related: BSP)
+	generate(removeRandomWalls = 0, hashIndex = null) { // generate maze from segments using recursive division (related: BSP)
 		if (this.width <= 2 && this.height <= 2) return;
+		if (hashIndex == null) hashIndex = this.newGenHashIndex++;
 
 		this.segments = new Array();
 
 
-		this._gen(0,0, this.width, this.height, 0, removeRandomWalls);
+		this._gen(0,0, this.width, this.height, 0, (removeRandomWalls+1)*hashIndex);
 
 		for (let i = 0; i < removeRandomWalls * (this.width * this.height * 0.8); i++) {
-			this._removeRandomSegment(i);
+			this._removeRandomSegment(i + hashIndex * removeRandomWalls);
 		}
 
 		this._addBoundry();
-		while (this._mergeSegments()) {} // commenting out this line removes the bug
+		while (this._mergeSegments()) {}
 		this._removeOneLongSegments();
 
 		this._generateTree();
@@ -418,8 +421,6 @@ class Maze {
 }
 
 
-// the bug is most likely somewhere in rayRect, or the order array sorting logic
-// I know it's something to do with the quadtree, as bruteforcing it doesn't show the bug
 class Quad {
     constructor(bounds, capacity = 8, depth = 0, maxDepth = 10) {
         this.bounds = bounds;

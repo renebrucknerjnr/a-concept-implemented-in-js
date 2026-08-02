@@ -304,8 +304,8 @@ class Game {
 
     	// the maze
     	this.sensitivity = 1.0;
-    	this.myMaze = new Maze(10, 10);
-    	this.myPlayer = {pos: new Point(8.5,7.5),  // world pos
+    	this.myMaze = new Maze(10, 10, 0);
+    	this.myPlayer = {pos: new Point(0.5,0.5),  // world pos
     					 vel: new Point(0,0),  // velocity
     					 acc: new Point(0,0),  // acceleration
     					 rotX: 0.7853981633974483,
@@ -377,7 +377,9 @@ class Game {
         
         // if (this.input.isKeyDown("KeyW") || this.input.isKeyDown("ArrowUp")) this.player.d = 3;
 
+    	// debug keybinds
         if (this.input.isKeyDown("KeyQ")) throw "Q was pressed, forced stop initiated :)";
+        if (this.input.isKeyDown("KeyR")) this.myMaze.generate(0.1);
 
     	// update player
     	let playerVelNeedsDiv = false;
@@ -528,9 +530,6 @@ class Game {
         		this.myPlayer.pos,
         		dir
         	);
-
-        	// Test if quad tree is really the problem
-        	// let cast = this.myMaze.bruteForceRaycast(this.myPlayer.pos, dir);
 
         	if (cast != null) {
         		const angDiff = rayAng - this.myPlayer.rotX;
