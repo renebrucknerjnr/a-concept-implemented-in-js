@@ -421,6 +421,9 @@ class Game {
         	}
         }
 
+        if (this.input.isKeyDown("ShiftLeft")) this.myPlayer.ZPOS = 0.25;
+        else this.myPlayer.ZPOS = 0.5;
+
         if (this.input.isKeyDown("ArrowLeft") || this.input.isKeyDown("KeyJ")) this.myPlayer.rotAccX -= 0.015 * this.sensitivity;
         if (this.input.isKeyDown("ArrowRight") || this.input.isKeyDown("KeyL")) this.myPlayer.rotAccX += 0.015 * this.sensitivity;
         if (this.input.isKeyDown("ArrowUp") || this.input.isKeyDown("KeyI")) this.myPlayer.rotAccY += 0.01 * this.sensitivity;
@@ -437,18 +440,29 @@ class Game {
 
         // collision
         const num_collision_rays = 10;
-        const num_collision_rays_negOne = 1/num_collision_rays;
+        const num_collision_rays_negOne = 1/(num_collision_rays+1);
         for (let i = 0; i < num_collision_rays; i++) { // cast rays around the player and see how far you are from walls
         	let a = i / num_collision_rays * 2 * Math.PI;
         	let d = new Point(Math.cos(a), Math.sin(a));
         	let cast = this.myMaze.tree.raycastNearest(this.myPlayer.pos, d);
 
         	if (cast != null && cast.t <= this.myPlayer.radius) {
-        		// let d2 = new Point(cast.point.x - this.myPlayer.pos.x, cast.point.y - this.myPlayer.pos.y)
-        		this.myPlayer.pos.x -= d.x*cast.t*num_collision_rays_negOne;
-        		this.myPlayer.pos.y -= d.y*cast.t*num_collision_rays_negOne;
-        		this.myPlayer.vel.x *= Math.abs(d.y); // this wall sliding does not take into accoun what angle the wall is at (axis-aligned walls only)
-        		this.myPlayer.vel.y *= Math.abs(d.x);
+        		let n = cast.segment.normal;
+        		
+        		// Vector from wall to player
+				let wx = this.myPlayer.pos.x - cast.point.x;
+				let wy = this.myPlayer.pos.y - cast.point.y;
+				if (wx * n.x + wy * n.y > 0) {
+				    n = new Point(-n.x, -n.y);
+				}
+
+        		this.myPlayer.pos.x -= n.x*(this.myPlayer.radius - cast.t + 1e-6);
+        		this.myPlayer.pos.y -= n.y*(this.myPlayer.radius - cast.t + 1e-6);
+        		let vn = this.myPlayer.vel.x * n.x + this.myPlayer.vel.y * n.y;
+				if (vn < 1e-6) {
+				    this.myPlayer.vel.x -= vn * n.x;
+				    this.myPlayer.vel.y -= vn * n.y;
+				}
         	}
         }
 
@@ -599,7 +613,6 @@ class Game {
 	        		const dist = hit.t * Math.cos(angDiff);
 	        		const H = F / dist;
         			const seg = hit.segment;
-	        		const wallDelta = new Point(seg.p1.x - seg.p2.x, seg.p1.y - seg.p2.y);
 
 	        		const wallH = seg.ceiling - seg.floor;
 
@@ -608,18 +621,24 @@ class Game {
 	        		const drawH = wallH * H;
 
 
-	        		let brightness = Math.max(10, Math.min(255, 255 - dist * 40));
+	        		// let brightness = Math.max(10, Math.min(255, 255 - dist * 40));
+	        		let brightness = Math.max(0.04, Math.min(1, 1 - dist * 0.156))
 	        		let R = brightness;
 	        		let G = brightness;
 	        		let B = brightness;
-	        		if (wallDelta.x >= wallDelta.y) {
+	        		let stripe = floor((hit.point.x + hit.point.y)*seg.texture[6]) % 2 == 0 ? 1 : 0;
+        			R *= seg.texture[0+3*stripe];
+        			G *= seg.texture[1+3*stripe];
+        			B *= seg.texture[2+3*stripe];
+	        		if (Math.abs(seg.normal.x) >= Math.abs(seg.normal.y)) {
 	        			R *= 0.8;
 	        			G *= 0.8;
-	        		} else {
 	        			B *= 0.8;
-	        			G *= 0.8;
+	        		} else {
+	        			R *= 1.2;
+	        			G *= 1.2;
+	        			B *= 1.2;
 	        		}
-	        		if (floor((hit.point.x + hit.point.y)*5) % 2 == 0) G *= 0.5; // vertical stripes in walls
 	        		R = Math.max(30, Math.min(255, R));
 	        		G = Math.max(30, Math.min(255, G));
 	        		B = Math.max(30, Math.min(255, B));

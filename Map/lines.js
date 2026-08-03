@@ -266,11 +266,14 @@ class Segment {
         this.p2 = p2;
         this.length = -1;
         this.bounds = null;
+        this.normal = null;
         this.computeLength();
         this.computeBounds();
+        this.computeNormal();
 
         this.floor = 0;
         this.ceilling = 1;
+        this.texture = [100, 100, 100,  200, 200, 200,  3]; // r,g,b, r,g,b, lines
     }
 
     computeLength() {
@@ -284,6 +287,15 @@ class Segment {
             new Point(Math.min(this.p1.x, this.p2.x), Math.min(this.p1.y, this.p2.y)),
             new Point(Math.max(this.p1.x, this.p2.x), Math.max(this.p1.y, this.p2.y))
         );
+    }
+
+    computeNormal() {
+        let p1 = (this.p1.x != this.p2.x ? (this.p1.x <= this.p2.x ? this.p1 : this.p2) : (this.p1.y <= this.p2.y ? this.p1 : this.p2));
+        let p2 = (this.p1.x != this.p2.x ? (this.p1.x <= this.p2.x ? this.p2 : this.p1) : (this.p1.y <= this.p2.y ? this.p2 : this.p1));
+        this.normal = new Point(p2.y - p1.y, p1.x - p2.x);
+        let d = Math.sqrt(this.normal.x**2 + this.normal.y**2);
+        this.normal.x = this.normal.x / (d+10e-7);
+        this.normal.y = this.normal.y / (d+10e-7);
     }
 
     equals(s) { // direction doesn't matter (for now)
