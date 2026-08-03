@@ -43,7 +43,7 @@ class GameArea {
 	}
 
 	start() {
-		this.canvas.style.background = "#222";
+		this.canvas.style.background = "#1e1e1e";
 		this.canvas.style.padding = "0px";
 		this.canvas.style.margin = "0px";
 
@@ -438,7 +438,7 @@ class Game {
         for (let i = 0; i < num_collision_rays; i++) { // cast rays around the player and see how far you are from walls
         	let a = i / num_collision_rays * 2 * Math.PI;
         	let d = new Point(Math.cos(a), Math.sin(a));
-        	let cast = this.myMaze.tree.raycast(this.myPlayer.pos, d);
+        	let cast = this.myMaze.tree.raycastNearest(this.myPlayer.pos, d);
 
         	if (cast != null && cast.t <= this.myPlayer.radius) {
         		// let d2 = new Point(cast.point.x - this.myPlayer.pos.x, cast.point.y - this.myPlayer.pos.y)
@@ -496,6 +496,59 @@ class Game {
     	}
     }
 
+    drawVisiblePart(
+	    x,
+	    wallTop,
+	    wallBottom,
+	    visible,
+	    dist,
+	    BAR_WIDTH
+	) {
+	    for (let i = 0; i < visible.length; ++i) {
+	        const region = visible[i];
+
+	        const top = Math.max(region.top, wallTop);
+	        const bottom = Math.min(region.bottom, wallBottom);
+
+	        if (top >= bottom)
+	            continue;
+
+	        this.drawWallColumn(
+	            x,
+	            top,
+	            bottom,
+	            wallTop,
+	            wallBottom,
+	            dist,
+	            BAR_WIDTH
+	        );
+
+	        const replacement = [];
+
+	        if (region.top < wallTop)
+	            replacement.push({
+	                top: region.top,
+	                bottom: wallTop,
+	                dist: dist
+	            });
+
+	        if (wallBottom < region.bottom)
+	            replacement.push({
+	                top: wallBottom,
+	                bottom: region.bottom,
+	                dist: dist
+	            });
+
+	        visible.splice(i, 1, ...replacement);
+
+	        i += replacement.length - 1;
+	    }
+	}
+
+	drawWallColumn(x, top, bottom, wallTop, wallBottom, dist, BAR_WIDTH) {
+		this.area.ctx.fillRect(x, top, BAR_WIDTH, bottom - top);
+	}
+
     render(alpha, timestamp, frameTime) { // finalColor = color * alpha + background * (1 - alpha)
         const ctx = this.area.ctx;
         this.currentRenderFPS = 1000/frameTime;
@@ -516,7 +569,6 @@ class Game {
         const SCREEN_HEIGHT = this.area.canvas.height;
         const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
         const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
-        // let lineX = F * Math.tan(rayAngDiffCenter);
 
         for (let i = 0; i < RAY_NUMBER; i++) {
         	const rayAng = this.myPlayer.rotX - FOV_RAD_2 + i * DELTA_FOV;
@@ -526,36 +578,51 @@ class Game {
         		Math.sin(rayAng)
         	);
 
-        	let cast = this.myMaze.tree.raycast(
+        	let hits = this.myMaze.bruteForceRaycast(
         		this.myPlayer.pos,
         		dir
         	);
 
-        	if (cast != null) {
+        	if (hits != null && hits.length > 0) {
         		const angDiff = rayAng - this.myPlayer.rotX;
-        		const dist = cast.t * Math.cos(angDiff);
-        		const H = F / dist;
-
         		const x = floor(i * BAR_WIDTH);
 				const x1 = floor((i + 1) * BAR_WIDTH);
-        		const y = (SCREEN_HEIGHT - H) * 0.5;
+	        	const cameraZ = 0.5;
+	        	const horizon = SCREEN_HEIGHT/2;
+        		let visible = [{top:0, bottom:SCREEN_HEIGHT, dist:-1}];
+        		
+        		for (const hit of hits) {
+	        		const dist = hit.t * Math.cos(angDiff);
+	        		const H = F / dist;
+        			const seg = hit.segment;
+	        		const wallDelta = new Point(seg.p1.x - seg.p2.x, seg.p1.y - seg.p2.y);
 
-        		const wallDelta = new Point(cast.segment.p1.x - cast.segment.p2.x, cast.segment.p1.y - cast.segment.p2.y);
+	        		const wallH = seg.ceiling - seg.floor;
 
-        		let brightness = Math.max(10, Math.min(255, 255 - dist * 40));
-        		let R = brightness;
-        		let G = brightness;
-        		let B = brightness;
-        		if (wallDelta.x >= wallDelta.y) {
-        			R *= 0.8;
-        			G *= 0.8;
-        		} else {
-        			B *= 0.8;
-        			G *= 0.8;
-        		}
-        		if (floor((cast.point.x + cast.point.y)*5) % 2 == 0) G *= 0.5; // vertical stripes in walls
-				ctx.fillStyle = `rgb(${R}, ${G}, ${B})`;
-        		ctx.fillRect(x, y, x1 - x, H);
+	        		const wallT = horizon - (seg.ceiling - cameraZ) * H;
+	        		const wallB = horizon - (seg.floor - cameraZ) * H;
+	        		const drawH = wallH * H;
+
+
+	        		let brightness = Math.max(10, Math.min(255, 255 - dist * 40));
+	        		let R = brightness;
+	        		let G = brightness;
+	        		let B = brightness;
+	        		if (wallDelta.x >= wallDelta.y) {
+	        			R *= 0.8;
+	        			G *= 0.8;
+	        		} else {
+	        			B *= 0.8;
+	        			G *= 0.8;
+	        		}
+	        		if (floor((hit.point.x + hit.point.y)*5) % 2 == 0) G *= 0.5; // vertical stripes in walls
+	        		R = Math.max(30, Math.min(255, R));
+	        		G = Math.max(30, Math.min(255, G));
+	        		B = Math.max(30, Math.min(255, B));
+					ctx.fillStyle = `rgb(${R}, ${G}, ${B})`;
+					
+	        		this.drawVisiblePart(x, wallT, wallB, visible, dist, x1 - x);
+	        	}
         	}
         }
 

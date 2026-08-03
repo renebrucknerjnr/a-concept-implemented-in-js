@@ -268,6 +268,9 @@ class Segment {
         this.bounds = null;
         this.computeLength();
         this.computeBounds();
+
+        this.floor = 0;
+        this.ceilling = 1;
     }
 
     computeLength() {

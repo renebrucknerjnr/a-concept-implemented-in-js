@@ -135,11 +135,14 @@ function verifyQuad(node) {
 }
 
 
-// TODO:  add different wall types
+// TODO:  add different wall types (with different heights and textures)
 // TODO:  add floor / ceiling tiles
 // TODO:  add entities
+// TODO:  add sounds
+// TODO:  add lights (maybe)
 // TODO:  maybe add doors (maybe)
 // TODO:  maybe beacons?
+
 class Maze {
 	constructor(w, h, hashIndex=0) {
 		this.width = w;
@@ -384,6 +387,13 @@ class Maze {
 		this.segments.push(new Segment(new Point(this.width, this.height), new Point(0, this.height)));
 		this.segments.push(new Segment(new Point(0, this.height), new Point(0, 0)));
 	}
+
+	_giveRandomHeights(hashIndex = 0) {
+		for (let i = 0; i < this.segments.length; i++) {
+			this.segments[i].floor = 0;
+			this.segments[i].ceiling = 1 + 2*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length);
+		}
+	}
 		
 	generate(removeRandomWalls = 0, hashIndex = null) { // generate maze from segments using recursive division (related: BSP)
 		if (this.width <= 2 && this.height <= 2) return;
@@ -402,6 +412,8 @@ class Maze {
 		while (this._mergeSegments()) {}
 		this._removeOneLongSegments();
 
+		this._giveRandomHeights();
+
 		this._generateTree();
 	}
 
@@ -410,13 +422,23 @@ class Maze {
 		this.tree.insertAll(this.segments);
 	}
 
-	bruteForceRaycast(origin, dir) {
+	bruteForceRaycastNearest(origin, dir) {
 		let cast = {t: Infinity, point: new Point(0,0), segment: null};
     	for (const s of this.segments) {
     		let d = raySegment(origin, dir, s);
     		if (d != null && cast.t > d.t) cast = {t: d.t, point: d.point, segment: s};
     	}
     	return cast;
+	}
+
+	bruteForceRaycast(origin, dir) {
+		let hits = [];
+    	for (const s of this.segments) {
+    		let d = raySegment(origin, dir, s);
+    		if (d != null) hits.push({t: d.t, point: d.point, segment: s});
+    	}
+    	hits.sort((a,b) => a.t - b.t);
+    	return hits;
 	}
 }
 
@@ -551,7 +573,7 @@ class Quad {
         return out;
     }
 
-    raycast(origin, dir, best = null) {
+    raycastNearest(origin, dir, best = null) {
 	    const maxT = best ? best.t : Infinity;
 
 	    const entry = rayRect(origin, dir, this.bounds, maxT);
@@ -596,9 +618,55 @@ class Quad {
 	    order.sort((a, b) => a.t - b.t); // slow, faster to manually check the order
 
 	    for (const item of order)
-	        best = item.child.raycast(origin, dir, best);
+	        best = item.child.raycastNearest(origin, dir, best);
 
 	    return best;
+	}
+
+	raycast(origin, dir, hits = []) {
+	    const entry = rayRect(origin, dir, this.bounds, Infinity);
+
+	    if (entry === null)
+	        return hits;
+
+	    // Test segments in this node.
+	    for (const seg of this.items) {
+	        const hit = raySegment(origin, dir, seg);
+
+	        if (!hit)
+	            continue;
+
+	        hits.push({
+	            t: hit.t,
+	            point: hit.point,
+	            segment: seg
+	        });
+	    }
+
+	    if (this.children) {
+	        // Visit children nearest-first.
+	        const order = [];
+
+	        for (const child of this.children) {
+	            const t = rayRect(
+	                origin,
+	                dir,
+	                child.bounds,
+	                Infinity
+	            );
+
+	            if (t !== null)
+	                order.push({ child, t });
+	        }
+
+	        order.sort((a, b) => a.t - b.t);
+
+	        for (const item of order)
+	            item.child.raycast(origin, dir, hits);
+	    }
+
+	    // return hits.sort((a, b) => a.t - b.t);
+	    return hits;
 	}
 
     clear() {
@@ -635,7 +703,11 @@ class QuadTree {
         return this.root.query(rect);
     }
 
+    raycastNearest(origin, dir) {
+	    return this.root.raycastNearest(origin, dir);
+	}
+
     raycast(origin, dir) {
-	    return this.root.raycast(origin, dir);
+	    return this.root.raycast(origin, dir).sort((a, b) => a.t - b.t);
 	}
 }

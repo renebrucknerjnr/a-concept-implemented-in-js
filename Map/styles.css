@@ -8,3 +8,7 @@ body {
 	margin:0px;
 	background: #1E1E1E;
 }
+
+canvas {
+	background: #1e1e1e;
+}
