@@ -314,7 +314,8 @@ class Game {
     					 rotVelY: 0,
     					 rotAccX: 0,
     					 rotAccY: 0,
-    					 radius: 0.2};
+    					 radius: 0.2,
+    					 ZPOS: 0.5};
     	this.drawMiniMap = true;
 
         // Timing
@@ -420,8 +421,10 @@ class Game {
         	}
         }
 
-        if (this.input.isKeyDown("ArrowLeft")) this.myPlayer.rotAccX -= 0.015 * this.sensitivity;
-        if (this.input.isKeyDown("ArrowRight")) this.myPlayer.rotAccX += 0.015 * this.sensitivity;
+        if (this.input.isKeyDown("ArrowLeft") || this.input.isKeyDown("KeyJ")) this.myPlayer.rotAccX -= 0.015 * this.sensitivity;
+        if (this.input.isKeyDown("ArrowRight") || this.input.isKeyDown("KeyL")) this.myPlayer.rotAccX += 0.015 * this.sensitivity;
+        if (this.input.isKeyDown("ArrowUp") || this.input.isKeyDown("KeyI")) this.myPlayer.rotAccY += 0.01 * this.sensitivity;
+        if (this.input.isKeyDown("ArrowDown") || this.input.isKeyDown("KeyK")) this.myPlayer.rotAccY -= 0.01 * this.sensitivity;
 
         this.myPlayer.pos.x += this.myPlayer.vel.x; // pos
         this.myPlayer.pos.y += this.myPlayer.vel.y;
@@ -450,7 +453,7 @@ class Game {
         }
 
         this.myPlayer.rotX = mod(this.myPlayer.rotX + this.myPlayer.rotVelX, 2*Math.PI); // rot pos
-        this.myPlayer.rotY = mod(this.myPlayer.rotY + this.myPlayer.rotVelY, 2*Math.PI);
+        this.myPlayer.rotY = Math.min(Math.max(-Math.PI/2, this.myPlayer.rotY + this.myPlayer.rotVelY), Math.PI/2);
         this.myPlayer.rotVelX += this.myPlayer.rotAccX;                                  // rot vel
         this.myPlayer.rotVelY += this.myPlayer.rotAccY;
         this.myPlayer.rotVelX *= 0.8;
@@ -587,8 +590,9 @@ class Game {
         		const angDiff = rayAng - this.myPlayer.rotX;
         		const x = floor(i * BAR_WIDTH);
 				const x1 = floor((i + 1) * BAR_WIDTH);
-	        	const cameraZ = 0.5;
-	        	const horizon = SCREEN_HEIGHT/2;
+	        	const cameraZ = this.myPlayer.ZPOS;
+	        	// const horizon = SCREEN_HEIGHT * (0.5 + Math.sin(this.myPlayer.rotY));
+	        	const horizon = SCREEN_HEIGHT * (0.5 + Math.tan(this.myPlayer.rotY));
         		let visible = [{top:0, bottom:SCREEN_HEIGHT, dist:-1}];
         		
         		for (const hit of hits) {
@@ -620,7 +624,7 @@ class Game {
 	        		G = Math.max(30, Math.min(255, G));
 	        		B = Math.max(30, Math.min(255, B));
 					ctx.fillStyle = `rgb(${R}, ${G}, ${B})`;
-					
+
 	        		this.drawVisiblePart(x, wallT, wallB, visible, dist, x1 - x);
 	        	}
         	}

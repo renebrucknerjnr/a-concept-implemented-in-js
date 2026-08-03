@@ -391,7 +391,7 @@ class Maze {
 	_giveRandomHeights(hashIndex = 0) {
 		for (let i = 0; i < this.segments.length; i++) {
 			this.segments[i].floor = 0;
-			this.segments[i].ceiling = 0.4 + 1.0*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length);
+			this.segments[i].ceiling = 0.4 + 1.2*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length);
 		}
 	}
 		
