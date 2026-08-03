@@ -579,15 +579,26 @@ class Game {
         const FOV = 90;
         const RAY_NUMBER = 200;
 
+        const RAY_NUMBER_2 = floor(RAY_NUMBER / 2);
         const FOV_RAD = FOV * Math.PI / 180;
         const FOV_RAD_2 = FOV_RAD * 0.5;
         const DELTA_FOV = FOV_RAD / RAY_NUMBER;
         const SCREEN_WIDTH = this.area.canvas.width;
         const SCREEN_HEIGHT = this.area.canvas.height;
         const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
+        const BAR_HEIGHT = SCREEN_HEIGHT / RAY_NUMBER;
         const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
+		const horizon = SCREEN_HEIGHT * (0.5 + Math.tan(this.myPlayer.rotY));
 
-        for (let i = 0; i < RAY_NUMBER; i++) {
+        // for (let i = 0; i < RAY_NUMBER_2; i++) { // floor / ceiling
+        // 	const y = floor((i + RAY_NUMBER_2) * BAR_HEIGHT);
+		// 	const y1 = floor((i + RAY_NUMBER_2 + 1) * BAR_HEIGHT);
+
+		// 	ctx.fillStyle = `rgb(30, 30, ${i/2/RAY_NUMBER_2*225})`;
+        // 	ctx.fillRect(0, y, SCREEN_WIDTH, y1 - y);
+        // }
+
+        for (let i = 0; i < RAY_NUMBER; i++) { // walls
         	const rayAng = this.myPlayer.rotX - FOV_RAD_2 + i * DELTA_FOV;
 
         	const dir = new Point(
@@ -606,7 +617,6 @@ class Game {
 				const x1 = floor((i + 1) * BAR_WIDTH);
 	        	const cameraZ = this.myPlayer.ZPOS;
 	        	// const horizon = SCREEN_HEIGHT * (0.5 + Math.sin(this.myPlayer.rotY));
-	        	const horizon = SCREEN_HEIGHT * (0.5 + Math.tan(this.myPlayer.rotY));
         		let visible = [{top:0, bottom:SCREEN_HEIGHT, dist:-1}];
         		
         		for (const hit of hits) {
@@ -630,7 +640,7 @@ class Game {
         			R *= seg.texture[0+3*stripe];
         			G *= seg.texture[1+3*stripe];
         			B *= seg.texture[2+3*stripe];
-	        		if (Math.abs(seg.normal.x) >= Math.abs(seg.normal.y)) {
+	        		if (Math.abs(seg.normal.x) > Math.abs(seg.normal.y)) {
 	        			R *= 0.8;
 	        			G *= 0.8;
 	        			B *= 0.8;
