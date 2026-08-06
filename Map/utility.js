@@ -57,5 +57,5 @@ function hash12(a, b = 10) { // https://www.shadertoy.com/view/WXSBDV
 }
 
 function clamp(v, l, u) {
-    return (v < l ? l : (v > u ? u : v));
+    return (v < l ? l : (v > u ? u : v)); // Math.max(l,Math.min(u, v));
 }

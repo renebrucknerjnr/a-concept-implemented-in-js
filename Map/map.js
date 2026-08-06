@@ -135,8 +135,6 @@ function verifyQuad(node) {
 }
 
 
-// TODO:  add different wall types (with different heights and textures)
-// TODO:  add floor / ceiling tiles
 // TODO:  add entities
 // TODO:  add sounds
 // TODO:  add lights (maybe)

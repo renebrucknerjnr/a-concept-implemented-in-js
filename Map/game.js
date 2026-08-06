@@ -315,8 +315,9 @@ class Game {
     					 rotAccX: 0,
     					 rotAccY: 0,
     					 radius: 0.2,
-    					 ZPOS: 0.5};
-    	this.drawMiniMap = true;
+    					 ZPOS: 0.5,
+    					 velMult: 1};
+    	this.drawMiniMap = false;
 
         // Timing
         this.lastTime = 0;
@@ -385,44 +386,56 @@ class Game {
     	// update player
     	let playerVelNeedsDiv = false;
         if (this.input.isKeyDown("KeyW")) {
-        	this.myPlayer.acc.x += Math.cos(this.myPlayer.rotX)*0.005;
-        	this.myPlayer.acc.y += Math.sin(this.myPlayer.rotX)*0.005;
+        	this.myPlayer.acc.x += Math.cos(this.myPlayer.rotX)*0.005 * this.myPlayer.velMult;
+        	this.myPlayer.acc.y += Math.sin(this.myPlayer.rotX)*0.005 * this.myPlayer.velMult;
         	playerVelNeedsDiv = true;
         }
         else if (this.input.isKeyDown("KeyS")) {
-        	this.myPlayer.acc.x -= Math.cos(this.myPlayer.rotX)*0.005;
-        	this.myPlayer.acc.y -= Math.sin(this.myPlayer.rotX)*0.005;
+        	this.myPlayer.acc.x -= Math.cos(this.myPlayer.rotX)*0.005 * this.myPlayer.velMult;
+        	this.myPlayer.acc.y -= Math.sin(this.myPlayer.rotX)*0.005 * this.myPlayer.velMult;
         	playerVelNeedsDiv = true;
         }
         if (this.input.isKeyDown("KeyA")) {
         	if (playerVelNeedsDiv) {
 				this.myPlayer.acc.x *= 0.5;
 				this.myPlayer.acc.y *= 0.5;
-				this.myPlayer.acc.x -= 0.5*Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
-        		this.myPlayer.acc.y -= 0.5*Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+				this.myPlayer.acc.x -= 0.5*Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
+        		this.myPlayer.acc.y -= 0.5*Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
         		this.myPlayer.acc.x *= 1.4142135623730951;
 				this.myPlayer.acc.y *= 1.4142135623730951;
         	} else {
-        		this.myPlayer.acc.x -= Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
-        		this.myPlayer.acc.y -= Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.x -= Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
+        		this.myPlayer.acc.y -= Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
         	}
         }
         else if (this.input.isKeyDown("KeyD")) {
         	if (playerVelNeedsDiv) {
 				this.myPlayer.acc.x *= 0.5;
 				this.myPlayer.acc.y *= 0.5;
-				this.myPlayer.acc.x += 0.5*Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
-        		this.myPlayer.acc.y += 0.5*Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+				this.myPlayer.acc.x += 0.5*Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
+        		this.myPlayer.acc.y += 0.5*Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
         		this.myPlayer.acc.x *= 1.4142135623730951;
 				this.myPlayer.acc.y *= 1.4142135623730951;
         	} else {
-        		this.myPlayer.acc.x += Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005;
-        		this.myPlayer.acc.y += Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005;
+        		this.myPlayer.acc.x += Math.cos(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
+        		this.myPlayer.acc.y += Math.sin(this.myPlayer.rotX + 1.5707963267948966)*0.005 * this.myPlayer.velMult;
         	}
         }
 
-        if (this.input.isKeyDown("ShiftLeft")) this.myPlayer.ZPOS = 0.25;
-        else this.myPlayer.ZPOS = 0.5;
+
+        if (this.input.isKeyDown("KeyC")) {
+        	// crouch
+        	this.myPlayer.ZPOS = 0.25;
+        	this.myPlayer.velMult = 0.5;
+        } else if (this.input.isKeyDown("ShiftLeft") && Math.abs(this.myPlayer.vel.x) + Math.abs(this.myPlayer.vel.y) > 10e-3) {
+        	// sprint
+        	this.myPlayer.ZPOS = 0.55;
+        	this.myPlayer.velMult = 1.35;
+        } else {
+        	// normal
+        	this.myPlayer.ZPOS = 0.5;
+        	this.myPlayer.velMult = 1.0;
+        }
 
         if (this.input.isKeyDown("ArrowLeft") || this.input.isKeyDown("KeyJ")) this.myPlayer.rotAccX -= 0.015 * this.sensitivity;
         if (this.input.isKeyDown("ArrowRight") || this.input.isKeyDown("KeyL")) this.myPlayer.rotAccX += 0.015 * this.sensitivity;
@@ -577,7 +590,7 @@ class Game {
         // https://www.desmos.com/notebook/jequqkbjby
         // fixed x, fish-eye-fixed, stereographic projection
         const FOV = 90;
-        const RAY_NUMBER = 200;
+        const RAY_NUMBER = 100;
 
         const RAY_NUMBER_2 = floor(RAY_NUMBER / 2);
         const FOV_RAD = FOV * Math.PI / 180;
@@ -634,10 +647,13 @@ class Game {
 
 			const ceilY = ceilStart + (i / RAY_NUMBER_2) * ceilHeight;
 			const ceilY1 = ceilStart + ((i + 1) / RAY_NUMBER_2) * ceilHeight;
-			const rowDistC = (cameraZ * F) / (horizon - ceilY); // world distance to floor
+			const rowDistC = ((1 - cameraZ) * F) / (horizon - ceilY); // world distance to floor
 
 			// four
-			// for (let x = 0; x < SCREEN_WIDTH; x++) {
+			// for (let i = 0; i < RAY_NUMBER; i++) {
+			// 	const x = floor(i * BAR_WIDTH);
+			// 	const x1 = floor((i + 1) * BAR_WIDTH);
+
 			// 	const cellX = floor(floorX);
 			// 	const cellY = floor(floorY);
 
@@ -649,9 +665,12 @@ class Game {
 			// 	floorX += stepX;
 			// 	floorY += stepY;
 
-			// 	ctx.fillStyle = `rgb(100,100,100)`;
-			// 	ctx.fillRect(x, y, BAR_WIDTH, BAR_HEIGHT);
-			// 	ctx.fillRect(x, ceilY, BAR_WIDTH, BAR_HEIGHT);
+			// 	const light = 1 / (1 + rowDist * 0.7)
+			// 	const light2 = 1 / (1 + rowDistC * 0.7)
+			// 	ctx.fillStyle = `rgb(30, ${((cellX)%2 == 0 ? 30 : 100)}, ${clamp(light*255, 30, 255)})`;
+	        // 	ctx.fillRect(x, floor(y), x1 - x, floor(y1) - floor(y)); // floor
+			// 	ctx.fillStyle = `rgb(${clamp(light2*255, 30, 255)}, 30, 30)`;
+	        // 	ctx.fillRect(x, floor(ceilY), x1 - x, floor(ceilY1) - floor(ceilY)); // ceil
 			// }
 
 			// scanlines
