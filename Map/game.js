@@ -467,7 +467,7 @@ class Game {
         }
 
         this.myPlayer.rotX = mod(this.myPlayer.rotX + this.myPlayer.rotVelX, 2*Math.PI); // rot pos
-        this.myPlayer.rotY = Math.min(Math.max(-Math.PI/2, this.myPlayer.rotY + this.myPlayer.rotVelY), Math.PI/2);
+        this.myPlayer.rotY = clamp(this.myPlayer.rotY + this.myPlayer.rotVelY, -Math.PI/7, Math.PI/7);
         this.myPlayer.rotVelX += this.myPlayer.rotAccX;                                  // rot vel
         this.myPlayer.rotVelY += this.myPlayer.rotAccY;
         this.myPlayer.rotVelX *= 0.8;
@@ -587,10 +587,7 @@ class Game {
         const SCREEN_HEIGHT = this.area.canvas.height;
         const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
         const BAR_HEIGHT = SCREEN_HEIGHT / RAY_NUMBER;
-        // const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
-		// const horizon = SCREEN_HEIGHT * (0.5 + Math.tan(this.myPlayer.rotY));
-        const F = (SCREEN_WIDTH / 2) / Math.tan(FOV_RAD / 2);
-		// const pitch = clamp(this.myPlayer.rotY * F, -SCREEN_HEIGHT/2, +SCREEN_HEIGHT/2);
+        const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
 		const pitch = this.myPlayer.rotY * F;
 		const horizon = SCREEN_HEIGHT * 0.5 + pitch;
 
@@ -601,11 +598,9 @@ class Game {
 		const ceilEnd = Math.min(horizon, SCREEN_HEIGHT);
 		const ceilHeight = ceilEnd - ceilStart;
 
-
-        for (let i = 0; i < RAY_NUMBER_2; i++) { // floor / ceiling
-        	// const H = F / dist;
-        	// const wallBottom = horizon - (seg.floor - cameraZ) * H;
-
+        // floor / ceiling
+        for (let i = 0; i < RAY_NUMBER_2; i++) {
+        	// idk if this helped, but I refrenced it:  https://lodev.org/cgtutor/raycasting2.html
 			const y = floorStart + (i / RAY_NUMBER_2) * floorHeight;
 			const y1 = floorStart + ((i + 1) / RAY_NUMBER_2) * floorHeight;
 
@@ -639,6 +634,7 @@ class Game {
 
 			const ceilY = ceilStart + (i / RAY_NUMBER_2) * ceilHeight;
 			const ceilY1 = ceilStart + ((i + 1) / RAY_NUMBER_2) * ceilHeight;
+			const rowDistC = (cameraZ * F) / (horizon - ceilY); // world distance to floor
 
 			// four
 			// for (let x = 0; x < SCREEN_WIDTH; x++) {
@@ -659,13 +655,16 @@ class Game {
 			// }
 
 			// scanlines
-			ctx.fillStyle = `rgb(30, 30, ${i/2/RAY_NUMBER_2*225})`;
-        	ctx.fillRect(0, y, SCREEN_WIDTH, y1 - y); // floor
-			ctx.fillStyle = `rgb(${((0.5- i/2/RAY_NUMBER_2))*225}, 30, 30)`;
+			const light = 1 / (1 + rowDist * 0.7)
+			const light2 = 1 / (1 + rowDistC * 0.7)
+			ctx.fillStyle = `rgb(30, 30, ${clamp(light*255, 30, 255)})`;
+        	ctx.fillRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y)); // floor
+			ctx.fillStyle = `rgb(${clamp(light2*255, 30, 255)}, 30, 30)`;
         	ctx.fillRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY)); // ceiling
         }
 
-        for (let i = 0; i < RAY_NUMBER; i++) { // walls
+        // walls
+        for (let i = 0; i < RAY_NUMBER; i++) {
         	const rayAng = this.myPlayer.rotX - FOV_RAD_2 + i * DELTA_FOV;
 
         	const dir = new Point(
@@ -726,10 +725,7 @@ class Game {
         	}
         }
 
-        ctx.fillStyle = "#00FF00";
-        ctx.fillRect(0, horizon, SCREEN_WIDTH, 5);
-
-        // Draw top down maze
+        // Top-down maze
         if (this.drawMiniMap) {
 	        const MAZE_SCALE = 30;
 	        const MAZE_START = new Point(this.area.canvas.width - MAZE_SCALE*this.myMaze.width - 10, 10);
