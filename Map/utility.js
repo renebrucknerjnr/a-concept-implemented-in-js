@@ -55,3 +55,7 @@ function hash12(a, b = 10) { // https://www.shadertoy.com/view/WXSBDV
      =
     fract(x * 0.1031)*(fract(x * 0.1031)+34.33) * ((2*fract(y * 0.1031) + 34.33)*fract(x * 0.1031) + 34.33*fract(y * 0.1031)) */
 }
+
+function clamp(v, l, u) {
+    return (v < l ? l : (v > u ? u : v));
+}

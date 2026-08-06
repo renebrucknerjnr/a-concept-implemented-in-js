@@ -479,7 +479,7 @@ class Game {
         if (this.input.isPointerLocked) { // doesn't work on all devices? why?
 	        // Use raw deltas for camera view changes
 	        this.myPlayer.rotX += this.input.mouse.moveX * this.sensitivity * 0.005;
-	        this.myPlayer.rotY += this.input.mouse.moveY * this.sensitivity * 0.005;
+	        this.myPlayer.rotY -= this.input.mouse.moveY * this.sensitivity * 0.005;
 	    }
 
     	if (this.input.mouse.buttonsDown.has(0) || this.input.touches.size > 0) {
@@ -587,16 +587,83 @@ class Game {
         const SCREEN_HEIGHT = this.area.canvas.height;
         const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
         const BAR_HEIGHT = SCREEN_HEIGHT / RAY_NUMBER;
-        const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
-		const horizon = SCREEN_HEIGHT * (0.5 + Math.tan(this.myPlayer.rotY));
+        // const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
+		// const horizon = SCREEN_HEIGHT * (0.5 + Math.tan(this.myPlayer.rotY));
+        const F = (SCREEN_WIDTH / 2) / Math.tan(FOV_RAD / 2);
+		// const pitch = clamp(this.myPlayer.rotY * F, -SCREEN_HEIGHT/2, +SCREEN_HEIGHT/2);
+		const pitch = this.myPlayer.rotY * F;
+		const horizon = SCREEN_HEIGHT * 0.5 + pitch;
 
-        // for (let i = 0; i < RAY_NUMBER_2; i++) { // floor / ceiling
-        // 	const y = floor((i + RAY_NUMBER_2) * BAR_HEIGHT);
-		// 	const y1 = floor((i + RAY_NUMBER_2 + 1) * BAR_HEIGHT);
+    	const floorStart = Math.max(horizon, 0); // floor
+		const floorEnd = SCREEN_HEIGHT;
+		const floorHeight = floorEnd - floorStart;
+		const ceilStart = 0; // ceil
+		const ceilEnd = Math.min(horizon, SCREEN_HEIGHT);
+		const ceilHeight = ceilEnd - ceilStart;
 
-		// 	ctx.fillStyle = `rgb(30, 30, ${i/2/RAY_NUMBER_2*225})`;
-        // 	ctx.fillRect(0, y, SCREEN_WIDTH, y1 - y);
-        // }
+
+        for (let i = 0; i < RAY_NUMBER_2; i++) { // floor / ceiling
+        	// const H = F / dist;
+        	// const wallBottom = horizon - (seg.floor - cameraZ) * H;
+
+			const y = floorStart + (i / RAY_NUMBER_2) * floorHeight;
+			const y1 = floorStart + ((i + 1) / RAY_NUMBER_2) * floorHeight;
+
+        	const cameraZ = this.myPlayer.ZPOS;
+			
+			// one
+			const p = y - horizon; // distance from horizon
+			if (p <= 0) continue; // skip over invalid numbers (1/0 = undefined  and  p < 0 = ceil)
+
+			const rowDist = (cameraZ * F) / p; // world distance to floor
+
+			// two
+			const dirX = Math.cos(this.myPlayer.rotX);
+			const dirY = Math.sin(this.myPlayer.rotX);
+
+			const planeX = -dirY * Math.tan(FOV_RAD_2);
+			const planeY =  dirX * Math.tan(FOV_RAD_2);
+
+			const rayDirX0 = dirX - planeX;
+			const rayDirY0 = dirY - planeY;
+
+			const rayDirX1 = dirX + planeX;
+			const rayDirY1 = dirY + planeY;
+
+			// three
+			const stepX = rowDist * (rayDirX1 - rayDirX0) / SCREEN_WIDTH;
+			const stepY = rowDist * (rayDirY1 - rayDirY0) / SCREEN_WIDTH;
+
+			let floorX = this.myPlayer.pos.x + rowDist * rayDirX0;
+			let floorY = this.myPlayer.pos.y + rowDist * rayDirY0;
+
+			const ceilY = ceilStart + (i / RAY_NUMBER_2) * ceilHeight;
+			const ceilY1 = ceilStart + ((i + 1) / RAY_NUMBER_2) * ceilHeight;
+
+			// four
+			// for (let x = 0; x < SCREEN_WIDTH; x++) {
+			// 	const cellX = floor(floorX);
+			// 	const cellY = floor(floorY);
+
+			// 	const tx = floorX - cellX; // fract
+			// 	const ty = floorY - cellY;
+
+			// 	// sample texture
+
+			// 	floorX += stepX;
+			// 	floorY += stepY;
+
+			// 	ctx.fillStyle = `rgb(100,100,100)`;
+			// 	ctx.fillRect(x, y, BAR_WIDTH, BAR_HEIGHT);
+			// 	ctx.fillRect(x, ceilY, BAR_WIDTH, BAR_HEIGHT);
+			// }
+
+			// scanlines
+			ctx.fillStyle = `rgb(30, 30, ${i/2/RAY_NUMBER_2*225})`;
+        	ctx.fillRect(0, y, SCREEN_WIDTH, y1 - y); // floor
+			ctx.fillStyle = `rgb(${((0.5- i/2/RAY_NUMBER_2))*225}, 30, 30)`;
+        	ctx.fillRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY)); // ceiling
+        }
 
         for (let i = 0; i < RAY_NUMBER; i++) { // walls
         	const rayAng = this.myPlayer.rotX - FOV_RAD_2 + i * DELTA_FOV;
@@ -606,7 +673,7 @@ class Game {
         		Math.sin(rayAng)
         	);
 
-        	let hits = this.myMaze.bruteForceRaycast(
+        	let hits = this.myMaze.tree.raycast(
         		this.myPlayer.pos,
         		dir
         	);
@@ -659,6 +726,8 @@ class Game {
         	}
         }
 
+        ctx.fillStyle = "#00FF00";
+        ctx.fillRect(0, horizon, SCREEN_WIDTH, 5);
 
         // Draw top down maze
         if (this.drawMiniMap) {
