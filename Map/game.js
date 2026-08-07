@@ -205,7 +205,43 @@ class GameArea {
 			this.data32[y*this.canvas.width + x] = (a << 24) | (b << 16) | (g << 8) | (r);
 		else                     // r g b a (big endian)
 			this.data32[y*this.canvas.width + x] = (r << 24) | (g << 16) | (b << 8) | (a);
+	}
 
+	fillBufferRect(x, y, w, h, r, g, b, a = 255) {
+	    if (w <= 0 || h <= 0) return;
+
+	    // 1. Calculate boundaries using integer floors
+	    let x1 = Math.floor(x);
+	    let y1 = Math.floor(y);
+	    let x2 = Math.floor(x + w);
+	    let y2 = Math.floor(y + h);
+
+	    // 2. Clear out off-screen geometry bounds entirely
+	    if (x2 <= 0 || x1 >= this.canvas.width || y2 <= 0 || y1 >= this.canvas.height) return;
+
+	    // 3. Screen-space scissor clipping (avoids cross-row array leaking)
+	    if (x1 < 0) x1 = 0;
+	    if (y1 < 0) y1 = 0;
+	    if (x2 > this.canvas.width) x2 = this.canvas.width;
+	    if (y2 > this.canvas.height) y2 = this.canvas.height;
+
+	    // 4. Calculate exact row fill length
+	    let fillWidth = x2 - x1;
+	    if (fillWidth <= 0) return;
+
+	    // 5. Build color packing bitmask (>>> 0 forces an unsigned integer)
+	    let col;
+	    if (this.isLittleEndian) {
+	        col = ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+	    } else {
+	        col = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+	    }
+
+	    // 6. Draw clean row blocks safely
+	    for (let currentY = y1; currentY < y2; currentY++) {
+	        let startIndex = currentY * this.canvas.width + x1;
+	        this.data32.fill(col, startIndex, startIndex + fillWidth);
+	    }
 	}
 
 	renderBuffer() {
@@ -707,7 +743,8 @@ class Game {
 	    wallBottom,
 	    visible,
 	    dist,
-	    BAR_WIDTH
+	    BAR_WIDTH,
+	    r,g,b
 	) {
 	    for (let i = 0; i < visible.length; ++i) {
 	        const region = visible[i];
@@ -725,7 +762,8 @@ class Game {
 	            wallTop,
 	            wallBottom,
 	            dist,
-	            BAR_WIDTH
+	            BAR_WIDTH,
+	            r,g,b
 	        );
 
 	        const replacement = [];
@@ -750,23 +788,24 @@ class Game {
 	    }
 	}
 
-	drawWallColumn(x, top, bottom, wallTop, wallBottom, dist, BAR_WIDTH) {
-		this.area.ctx.fillRect(x, top, BAR_WIDTH, bottom - top);
+	drawWallColumn(x, top, bottom, wallTop, wallBottom, dist, BAR_WIDTH, r,g,b) {
+		// this.area.ctx.fillRect(x, top, BAR_WIDTH, bottom - top);
+		this.area.fillBufferRect(x, top, BAR_WIDTH, bottom - top, r,g,b);
 	}
 
     render(alpha, timestamp, frameTime) { // finalColor = color * alpha + background * (1 - alpha)
         const ctx = this.area.ctx;
         this.currentRenderFPS = 1000/frameTime;
 
-        if (false) { // temp
         // Clear
-        ctx.clearRect(0, 0, ctx.width, ctx.height);
+        // ctx.clearRect(0, 0, ctx.width, ctx.height);
+        this.area.clearBuffer();
 
         // raycast scene
         // https://www.desmos.com/notebook/jequqkbjby
         // fixed x, fish-eye-fixed, stereographic projection
         const FOV = 90;
-        const RAY_NUMBER = 100;
+        const RAY_NUMBER = 200;
 
         const RAY_NUMBER_2 = floor(RAY_NUMBER / 2);
         const FOV_RAD = FOV * Math.PI / 180;
@@ -852,10 +891,15 @@ class Game {
 			// scanlines
 			const light = 1 / (1 + rowDist * 0.7)
 			const light2 = 1 / (1 + rowDistC * 0.7)
-			ctx.fillStyle = `rgb(30, 30, ${clamp(light*255, 30, 255)})`;
-        	ctx.fillRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y)); // floor
-			ctx.fillStyle = `rgb(${clamp(light2*255, 30, 255)}, 30, 30)`;
-        	ctx.fillRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY)); // ceiling
+			// ctx.fillStyle = `rgb(30, 30, ${clamp(light*255, 30, 255)})`;
+        	// ctx.fillRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y)); // floor
+			// ctx.fillStyle = `rgb(${clamp(light2*255, 30, 255)}, 30, 30)`;
+        	// ctx.fillRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY)); // ceiling
+
+        	this.area.fillBufferRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y),
+        							 30, 30, clamp(floor(light*255), 30, 255)); // floor
+        	this.area.fillBufferRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY),
+        							 clamp(floor(light2*255), 30, 255), 30, 30); // ceiling
         }
 
         // walls
@@ -913,9 +957,9 @@ class Game {
 	        		R = Math.max(30, Math.min(255, R));
 	        		G = Math.max(30, Math.min(255, G));
 	        		B = Math.max(30, Math.min(255, B));
-					ctx.fillStyle = `rgb(${R}, ${G}, ${B})`;
 
-	        		this.drawVisiblePart(x, wallT, wallB, visible, dist, x1 - x);
+	        		this.drawVisiblePart(x, wallT, wallB, visible, dist, x1 - x,
+	        							 R, G, B);
 	        	}
         	}
         }
@@ -965,14 +1009,8 @@ class Game {
 			// 	ctx.strokeRect(MAZE_START.x + (bounds[i].bounds.min.x) * MAZE_SCALE, MAZE_START.y + (bounds[i].bounds.min.y) * MAZE_SCALE, (bounds[i].bounds.max.x - bounds[i].bounds.min.x) * MAZE_SCALE, (bounds[i].bounds.max.y - bounds[i].bounds.min.y) * MAZE_SCALE);
 	        // }
 	    }
-		} // temp
 
 
-		this.area.clearBuffer();
-		for (let x = 100; x < 300; x++)
-			for (let y = 200; y < 500; y++)
-				this.area.setBufferPixel(x, y, 200, 200, 255, 255);
-		this.area.renderBuffer();
 
         // Debug info
         // ctx.fillStyle = "white";
@@ -980,6 +1018,8 @@ class Game {
         // ctx.fillText(`R_FPS: ${this.currentRenderFPS.toFixed(0)}`, 10, 60);
         // let canBRect = this.area.canvas.getBoundingClientRect();
         // ctx.fillText(`Mouse: (${Math.round((this.input.getPointer().x - canBRect.left)*(ctx.width / canBRect.width))}, ${Math.round((this.input.getPointer().y - canBRect.top)*(ctx.height / canBRect.height))})`, 10, 40);
+		
+		this.area.renderBuffer();
     }
 }
 
