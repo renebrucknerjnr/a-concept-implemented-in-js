@@ -1093,17 +1093,26 @@ class Game {
 	        // draw top down player on maze
 			this.area.fillBufferCirc(floor(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE), floor(MAZE_SCALE*this.myPlayer.radius),
 									 30, 30, 30);
-			
 			this.area.drawBufferLineThin(
 				floor(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE),
 				floor(MAZE_START.x + (this.myPlayer.pos.x + Math.cos(this.myPlayer.rotX)) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y + Math.sin(this.myPlayer.rotX)) * MAZE_SCALE),
 				255, 30, 30);
 
+			// maze walls
 	        for (const s of this.myMaze.segments) {
 				this.area.drawBufferLineThin(
 	        		floor(s.p1.x * MAZE_SCALE + MAZE_START.x), floor(s.p1.y * MAZE_SCALE + MAZE_START.y),
 	        		floor(s.p2.x * MAZE_SCALE + MAZE_START.x), floor(s.p2.y * MAZE_SCALE + MAZE_START.y),
 	        		154, 154, 205);
+	        }
+
+	        // solution
+	        for (const s of this.myMaze.solutionSegments) {
+				this.area.drawBufferLineThick(
+	        		floor(s.p1.x * MAZE_SCALE + MAZE_START.x), floor(s.p1.y * MAZE_SCALE + MAZE_START.y),
+	        		floor(s.p2.x * MAZE_SCALE + MAZE_START.x), floor(s.p2.y * MAZE_SCALE + MAZE_START.y),
+	        		2,
+	        		205, 154, 205);
 	        }
 	    }
 

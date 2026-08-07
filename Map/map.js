@@ -150,8 +150,10 @@ class Maze {
 		this.newGenHashIndex = hashIndex;
 
 		this.segments = null;
+		this.solutionSegments = null;
 
 		this.generate(0.1);
+		this.solve();
 	}
 
 	_mergeSegments() {
@@ -421,6 +423,46 @@ class Maze {
 		this._giveRandomHeights();
 
 		this._generateTree();
+	}
+
+	solve() {
+		const start = new Point(0.5, 0.5);
+		const target = new Point(this.width - 0.5, this.height - 0.5);
+		const rayN = 4;
+
+		class Nod {
+			constructor(p, parent=null, g=null) {
+				this.p = p;
+				this.parent = parent;
+				this.g = (g == null ? parent.g + Math.sqrt((parent.x - p.x)**2 + (parent.y - p.y)**2) : g); // exact cost from starting point
+				this.h = Math.sqrt((target.x - p.x)**2 + (target.y - p.y)**2); // estimated cost to end point
+				this.f = this.g + this.h;
+			}
+		}
+
+		this.solutionSegments = [];
+		// this.solutionSegments.push(new Segment(start, target)); // test
+
+
+		let currentPos = new Nod(start, null, 0);
+		let visited = [currentPos];
+		while (true) {
+			for (const n of visited) { // select next search location
+				if (n.f < currentPos.f) currentPos = n;
+			}
+
+			if (currentPos.h < 1) break;
+
+			for (let rayI = 0; rayI < rayN; rayI++) {
+				let dir = new Point(Math.cos(rayI / rayN * 2 * Math.PI), Math.sin(rayI / rayN * 2 * Math.PI));
+				let cast = this.tree.raycastNearest(currentPos.p, dir);
+				if (!cast || cast.t > 1.0) { // no wall hit
+					let p = new Point(currentPos.x + dir.x, currentPos.y + dir.y);
+					visited.push(new Nod(p, currentPos));
+				}
+			}
+			break;
+		}
 	}
 
 	_generateTree() {
