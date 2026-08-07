@@ -6,6 +6,8 @@ class GameArea {
 	constructor() {
 		this.canvas = document.createElement("canvas");
 		this.resizeCanvasFunction = this.resizeCanvasFunction.bind(this); // or wrap the callback (on resize) in an arrow function
+
+		this.RAY_NUMBER = 200;
 	}
 
 	resizeCanvasFunction() {
@@ -13,9 +15,14 @@ class GameArea {
 		if (window.innerWidth >= window.innerHeight) {
 			this.canvas.width = 2048; // 2**11
 			this.canvas.height = 1152; // 2**10+2**7
+			this.bufferWidth = floor(this.RAY_NUMBER * 16 / 9);
+			this.bufferHeight = floor(this.RAY_NUMBER);
 		} else {
 			this.canvas.width = 1152;
 			this.canvas.height = 2048;
+
+			this.bufferWidth = floor(this.RAY_NUMBER);
+			this.bufferHeight = floor(this.RAY_NUMBER * 16 / 9);
 		}
 
 		let canvasAspect = this.canvas.width / this.canvas.height;
@@ -88,10 +95,10 @@ class GameArea {
 		    return new Uint8Array(buffer)[0] === 0x42;
 		})();
 
-		this.buffer = new ArrayBuffer(this.canvas.width * this.canvas.height * 4);
+		this.buffer = new ArrayBuffer(this.bufferWidth * this.bufferHeight * 4);
 		this.data8 = new Uint8ClampedArray(this.buffer);
 		this.data32 = new Uint32Array(this.buffer);
-		this.gl.readPixels(0,0, this.canvas.width, this.canvas.height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.data8);
+		// this.gl.readPixels(0,0, this.canvas.width, this.canvas.height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.data8);
 
 		// WebGL
 
@@ -101,11 +108,11 @@ class GameArea {
 
 		this.gl.texParameteri(this.gl.TEXTURE_2D,
 		    this.gl.TEXTURE_MIN_FILTER,
-		    this.gl.NEAREST);
+		    this.gl.NEAREST); // nearest / linear
 
 		this.gl.texParameteri(this.gl.TEXTURE_2D,
 		    this.gl.TEXTURE_MAG_FILTER,
-		    this.gl.NEAREST);
+		    this.gl.NEAREST); // nearest / linear
 
 		this.gl.texParameteri(this.gl.TEXTURE_2D,
 		    this.gl.TEXTURE_WRAP_S,
@@ -119,8 +126,8 @@ class GameArea {
 		    this.gl.TEXTURE_2D,
 		    0,
 		    this.gl.RGBA,
-		    this.canvas.width,
-		    this.canvas.height,
+		    this.bufferWidth,
+		    this.bufferHeight,
 		    0,
 		    this.gl.RGBA,
 		    this.gl.UNSIGNED_BYTE,
@@ -189,7 +196,7 @@ class GameArea {
 	}
 
 	setBufferPixel(x,y, r,g,b, a=255) {
-		if (x < 0 || x >= this.canvas.width || y < 0 || y >= this.canvas.height) return;
+		if (x < 0 || x >= this.bufferWidth || y < 0 || y >= this.bufferHeight) return;
 		r = clamp(r, 0, 255);
 		g = clamp(g, 0, 255);
 		b = clamp(b, 0, 255);
@@ -202,9 +209,9 @@ class GameArea {
 		// data[i + 3] = a;
 
 		if (this.isLittleEndian) // a b g r (little endian)
-			this.data32[y*this.canvas.width + x] = (a << 24) | (b << 16) | (g << 8) | (r);
+			this.data32[y*this.bufferWidth + x] = (a << 24) | (b << 16) | (g << 8) | (r);
 		else                     // r g b a (big endian)
-			this.data32[y*this.canvas.width + x] = (r << 24) | (g << 16) | (b << 8) | (a);
+			this.data32[y*this.bufferWidth + x] = (r << 24) | (g << 16) | (b << 8) | (a);
 	}
 
 	fillBufferRect(x, y, w, h, r, g, b, a = 255) {
@@ -217,13 +224,13 @@ class GameArea {
 	    let y2 = Math.floor(y + h);
 
 	    // 2. Clear out off-screen geometry bounds entirely
-	    if (x2 <= 0 || x1 >= this.canvas.width || y2 <= 0 || y1 >= this.canvas.height) return;
+	    if (x2 <= 0 || x1 >= this.bufferWidth || y2 <= 0 || y1 >= this.bufferHeight) return;
 
 	    // 3. Screen-space scissor clipping (avoids cross-row array leaking)
 	    if (x1 < 0) x1 = 0;
 	    if (y1 < 0) y1 = 0;
-	    if (x2 > this.canvas.width) x2 = this.canvas.width;
-	    if (y2 > this.canvas.height) y2 = this.canvas.height;
+	    if (x2 > this.bufferWidth) x2 = this.bufferWidth;
+	    if (y2 > this.bufferHeight) y2 = this.bufferHeight;
 
 	    // 4. Calculate exact row fill length
 	    let fillWidth = x2 - x1;
@@ -239,7 +246,7 @@ class GameArea {
 
 	    // 6. Draw clean row blocks safely
 	    for (let currentY = y1; currentY < y2; currentY++) {
-	        let startIndex = currentY * this.canvas.width + x1;
+	        let startIndex = currentY * this.bufferWidth + x1;
 	        this.data32.fill(col, startIndex, startIndex + fillWidth);
 	    }
 	}
@@ -252,7 +259,7 @@ class GameArea {
 		this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
 		this.gl.texSubImage2D(
 		    this.gl.TEXTURE_2D, 0, 0, 0,
-		    this.canvas.width, this.canvas.height,
+		    this.bufferWidth, this.bufferHeight,
 		    this.gl.RGBA, this.gl.UNSIGNED_BYTE,
 		    this.data8
 		);
@@ -794,7 +801,6 @@ class Game {
 	}
 
     render(alpha, timestamp, frameTime) { // finalColor = color * alpha + background * (1 - alpha)
-        const ctx = this.area.ctx;
         this.currentRenderFPS = 1000/frameTime;
 
         // Clear
@@ -805,14 +811,14 @@ class Game {
         // https://www.desmos.com/notebook/jequqkbjby
         // fixed x, fish-eye-fixed, stereographic projection
         const FOV = 90;
-        const RAY_NUMBER = 200;
+        const RAY_NUMBER = this.area.RAY_NUMBER;
 
         const RAY_NUMBER_2 = floor(RAY_NUMBER / 2);
         const FOV_RAD = FOV * Math.PI / 180;
         const FOV_RAD_2 = FOV_RAD * 0.5;
         const DELTA_FOV = FOV_RAD / RAY_NUMBER;
-        const SCREEN_WIDTH = this.area.canvas.width;
-        const SCREEN_HEIGHT = this.area.canvas.height;
+        const SCREEN_WIDTH = this.area.bufferWidth;
+        const SCREEN_HEIGHT = this.area.bufferHeight;
         const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
         const BAR_HEIGHT = SCREEN_HEIGHT / RAY_NUMBER;
         const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
