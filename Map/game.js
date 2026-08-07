@@ -43,6 +43,26 @@ class GameArea {
 	}
 
 	start() {
+		this.vsSource = `#version 300 es
+		in vec2 position;
+		out vec2 vTexCoord;
+		void main() {
+		    // Maps positions from clip space [-1,1] to texture space [0,1]
+		    vTexCoord = position * 0.5 + 0.5;
+		    // Invert Y axis because WebGL textures are upside down by default
+		    vTexCoord.y = 1.0 - vTexCoord.y; 
+		    gl_Position = vec4(position, 0.0, 1.0);
+		}`;
+
+		this.fsSource = `#version 300 es
+		precision highp float;
+		in vec2 vTexCoord;
+		uniform sampler2D uTexture;
+		out vec4 fragColor;
+		void main() {
+		    fragColor = texture(uTexture, vTexCoord);
+		}`;
+
 		this.canvas.style.background = "#1e1e1e";
 		this.canvas.style.padding = "0px";
 		this.canvas.style.margin = "0px";
@@ -56,9 +76,164 @@ class GameArea {
 			document.body.appendChild(this.canvas);
 		}
 
-		this.ctx = this.canvas.getContext("2d");
-		this.ctx.width = this.canvas.width;
-		this.ctx.height = this.canvas.height;
+		this.gl = this.canvas.getContext("webgl2") || this.canvas.getContext("webgl");
+		this.initWebGLPipeline();
+		// this.ctx = this.canvas.getContext("2d");
+		// this.ctx.width = this.canvas.width;
+		// this.ctx.height = this.canvas.height;
+
+		this.isLittleEndian = (() => {
+		    const buffer = new ArrayBuffer(2);
+		    new Uint16Array(buffer)[0] = 0x2442;
+		    return new Uint8Array(buffer)[0] === 0x42;
+		})();
+
+		this.buffer = new ArrayBuffer(this.canvas.width * this.canvas.height * 4);
+		this.data8 = new Uint8ClampedArray(this.buffer);
+		this.data32 = new Uint32Array(this.buffer);
+		this.gl.readPixels(0,0, this.canvas.width, this.canvas.height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.data8);
+
+		// WebGL
+
+		this.texture = this.gl.createTexture();
+
+		this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
+
+		this.gl.texParameteri(this.gl.TEXTURE_2D,
+		    this.gl.TEXTURE_MIN_FILTER,
+		    this.gl.NEAREST);
+
+		this.gl.texParameteri(this.gl.TEXTURE_2D,
+		    this.gl.TEXTURE_MAG_FILTER,
+		    this.gl.NEAREST);
+
+		this.gl.texParameteri(this.gl.TEXTURE_2D,
+		    this.gl.TEXTURE_WRAP_S,
+		    this.gl.CLAMP_TO_EDGE);
+
+		this.gl.texParameteri(this.gl.TEXTURE_2D,
+		    this.gl.TEXTURE_WRAP_T,
+		    this.gl.CLAMP_TO_EDGE);
+
+		this.gl.texImage2D(
+		    this.gl.TEXTURE_2D,
+		    0,
+		    this.gl.RGBA,
+		    this.canvas.width,
+		    this.canvas.height,
+		    0,
+		    this.gl.RGBA,
+		    this.gl.UNSIGNED_BYTE,
+		    null // this.data8
+		);
+	}
+
+	initWebGLPipeline() {
+		const gl = this.gl;
+
+		// create and compile shaders
+		const vs = gl.createShader(gl.VERTEX_SHADER);
+		gl.shaderSource(vs, this.vsSource);
+		gl.compileShader(vs);
+
+		const fs = gl.createShader(gl.FRAGMENT_SHADER);
+		gl.shaderSource(fs, this.fsSource);
+		gl.compileShader(fs);
+
+		// link shader program
+		this.shaderProgram = gl.createProgram();
+		gl.attachShader(this.shaderProgram, vs);
+		gl.attachShader(this.shaderProgram, fs);
+		gl.linkProgram(this.shaderProgram);
+
+		// full-screen quad geometry
+		const vertices = new Float32Array([
+			-1.0, -1.0,  1.0, -1.0,  -1.0, 1.0,
+			-1.0,  1.0,  1.0, -1.0,   1.0, 1.0
+		]);
+
+		this.quadVAO = gl.createVertexArray();
+		const vbo = gl.createBuffer();
+
+		gl.bindVertexArray(this.quadVAO);
+		gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+		gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+		// get position attribute index from shader and enable it
+		const positionLoc = gl.getAttribLocation(this.shaderProgram, "position");
+		gl.enableVertexAttribArray(positionLoc);
+		gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+
+		// clean up bindings safely
+		gl.bindVertexArray(null);
+		gl.bindBuffer(gl.ARRAY_BUFFER, null);
+	}
+
+	clearBuffer() {
+		// let r = 30;
+		// let g = 30;
+		// let b = 30;
+		// let a = 255;
+
+		if (this.isLittleEndian)  { // a b g r (little endian)
+			// for (let i = 0; i < this.canvas.width * this.canvas.height; i++) {
+			// 	this.data32[i] = -14803426; // (a << 24) | (b << 16) | (g << 8) | (r);
+			// }
+			this.data32.fill(-14803426);
+		} else {                    // r g b a (big endian)
+			// for (let i = 0; i < this.canvas.width * this.canvas.height; i++) {
+			// 	this.data32[i] = 505290495; // (r << 24) | (g << 16) | (b << 8) | (a);
+			// }
+			this.data32.fill(505290495);
+		}
+	}
+
+	setBufferPixel(x,y, r,g,b, a=255) {
+		if (x < 0 || x >= this.canvas.width || y < 0 || y >= this.canvas.height) return;
+		r = clamp(r, 0, 255);
+		g = clamp(g, 0, 255);
+		b = clamp(b, 0, 255);
+		a = clamp(a, 0, 255);
+
+		// const i = (y*this.canvas.width + x) * 4;
+		// data[i + 0] = r;
+		// data[i + 1] = g;
+		// data[i + 2] = b;
+		// data[i + 3] = a;
+
+		if (this.isLittleEndian) // a b g r (little endian)
+			this.data32[y*this.canvas.width + x] = (a << 24) | (b << 16) | (g << 8) | (r);
+		else                     // r g b a (big endian)
+			this.data32[y*this.canvas.width + x] = (r << 24) | (g << 16) | (b << 8) | (a);
+
+	}
+
+	renderBuffer() {
+		// this.imgData.data.set(this.data8);
+		// this.ctx.putImageData(this.imgData, 0, 0);
+
+		// pass data to webgpu
+		this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
+		this.gl.texSubImage2D(
+		    this.gl.TEXTURE_2D, 0, 0, 0,
+		    this.canvas.width, this.canvas.height,
+		    this.gl.RGBA, this.gl.UNSIGNED_BYTE,
+		    this.data8
+		);
+
+		// viewport dimensions
+		this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+
+		// clear gpu frame
+		this.gl.clearColor(0.0,0.0,0.0,1.0);
+		this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+
+		// activate shader program
+		this.gl.useProgram(this.shaderProgram);
+		this.gl.bindVertexArray(this.quadVAO);
+
+		// draw geometry to screen
+		this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 	}
 }
 
@@ -497,8 +672,8 @@ class Game {
 
     	if (this.input.mouse.buttonsDown.has(0) || this.input.touches.size > 0) {
     		let canBRect = this.area.canvas.getBoundingClientRect();
-        	this.input.mouse.mx = Math.round((this.input.getPointer().x - canBRect.left)*(this.area.ctx.width / canBRect.width));
-        	this.input.mouse.my = Math.round((this.input.getPointer().y - canBRect.top)*(this.area.ctx.height / canBRect.height));
+        	this.input.mouse.mx = Math.round((this.input.getPointer().x - canBRect.left)*(this.area.canvas.width / canBRect.width));
+        	this.input.mouse.my = Math.round((this.input.getPointer().y - canBRect.top)*(this.area.canvas.height / canBRect.height));
 
 
 			// let lastLineI = this.linePoints.length - 1;
@@ -583,6 +758,7 @@ class Game {
         const ctx = this.area.ctx;
         this.currentRenderFPS = 1000/frameTime;
 
+        if (false) { // temp
         // Clear
         ctx.clearRect(0, 0, ctx.width, ctx.height);
 
@@ -789,7 +965,14 @@ class Game {
 			// 	ctx.strokeRect(MAZE_START.x + (bounds[i].bounds.min.x) * MAZE_SCALE, MAZE_START.y + (bounds[i].bounds.min.y) * MAZE_SCALE, (bounds[i].bounds.max.x - bounds[i].bounds.min.x) * MAZE_SCALE, (bounds[i].bounds.max.y - bounds[i].bounds.min.y) * MAZE_SCALE);
 	        // }
 	    }
+		} // temp
 
+
+		this.area.clearBuffer();
+		for (let x = 100; x < 300; x++)
+			for (let y = 200; y < 500; y++)
+				this.area.setBufferPixel(x, y, 200, 200, 255, 255);
+		this.area.renderBuffer();
 
         // Debug info
         // ctx.fillStyle = "white";
