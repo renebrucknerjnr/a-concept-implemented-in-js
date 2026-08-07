@@ -251,6 +251,119 @@ class GameArea {
 	    }
 	}
 
+	fillBufferCirc(x, y, R,  r, g, b, a = 255) {
+		if (R <= 0) return;
+
+	    // 1. Calculate boundaries using integer floors
+	    let x1 = Math.floor(x - R);
+	    let y1 = Math.floor(y - R);
+	    let x2 = Math.floor(x + R);
+	    let y2 = Math.floor(y + R);
+
+	    // 2. Clear out off-screen geometry bounds entirely
+	    if (x2 <= 0 || x1 >= this.bufferWidth || y2 <= 0 || y1 >= this.bufferHeight) return;
+
+	    // 3. Screen-space scissor clipping (avoids cross-row array leaking)
+	    if (x1 < 0) x1 = 0;
+	    if (y1 < 0) y1 = 0;
+	    if (x2 > this.bufferWidth) x2 = this.bufferWidth;
+	    if (y2 > this.bufferHeight) y2 = this.bufferHeight;
+
+	    // 4. Calculate exact row fill length
+	    let fillWidth = x2 - x1;
+	    if (fillWidth <= 0) return;
+
+	    // 5. Build color packing bitmask (>>> 0 forces an unsigned integer)
+	    let col;
+	    if (this.isLittleEndian) {
+	        col = ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+	    } else {
+	        col = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+	    }
+
+		for (let xc = x1; xc <= x2; xc++) {
+			for (let yc = y1; yc <= y2; yc++) {
+				if ((xc - x)**2 + (yc - y)**2 <= R**2) {
+					this.data32[yc*this.bufferWidth + xc] = col;
+				}
+			}
+		}
+	}
+
+	drawBufferLineThin(x1, y1, x2, y2, r, g, b, a = 255) {
+	    x1 = Math.floor(x1); y1 = Math.floor(y1);
+	    x2 = Math.floor(x2); y2 = Math.floor(y2);
+
+	    const dx = Math.abs(x2 - x1);
+	    const dy = Math.abs(y2 - y1);
+	    const sx = (x1 < x2) ? 1 : -1;
+	    const sy = (y1 < y2) ? 1 : -1;
+	    let err = dx - dy;
+
+	    let col = this.isLittleEndian ? ((a << 24) | (b << 16) | (g << 8) | r) >>> 0 : ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+
+	    while (true) {
+	        if (x1 >= 0 && x1 < this.bufferWidth && y1 >= 0 && y1 < this.bufferHeight) {
+	            this.data32[y1 * this.bufferWidth + x1] = col;
+	        }
+
+	        if (x1 === x2 && y1 === y2) break;
+	        const e2 = 2 * err;
+	        if (e2 > -dy) { err -= dy; x1 += sx; }
+	        if (e2 < dx) { err += dx; y1 += sy; }
+	    }
+	}
+
+	drawBufferLineThick(x1, y1, x2, y2, w, r, g, b, a = 255) {
+	    if (w <= 1) return this.drawBufferLineThin(x1, y1, x2, y2, r, g, b, a);
+
+	    // 1. Calculate direction and perpendicular normal vector
+	    const dx = x2 - x1;
+	    const dy = y2 - y1;
+	    const len = Math.hypot(dx, dy);
+	    if (len === 0) return;
+
+	    // Scale normal to half-thickness
+	    const nx = (-dy / len) * (w * 0.5);
+	    const ny = (dx / len) * (w * 0.5);
+
+	    // 2. Generate the 4 corners of the thick line quad
+	    const p1x = x1 + nx, p1y = y1 + ny;
+	    const p2x = x1 - nx, p2y = y1 - ny;
+	    const p3x = x2 - nx, p3y = y2 - ny;
+	    const p4x = x2 + nx, p4y = y2 + ny;
+
+	    // 3. Scan-line rasterize the 4-point polygon bounds
+	    const vertices = [[p1x, p1y], [p2x, p2y], [p3x, p3y], [p4x, p4y]];
+	    let minY = Math.max(0, Math.floor(Math.min(p1y, p2y, p3y, p4y)));
+	    let maxY = Math.min(this.bufferHeight - 1, Math.floor(Math.max(p1y, p2y, p3y, p4y)));
+
+	    let col = this.isLittleEndian ? ((a << 24) | (b << 16) | (g << 8) | r) >>> 0 : ((r << 24) | (g << 16) | (b << 8) | a) >>> 0;
+
+	    // Loop through every scanline row intersecting the line's bounding box
+	    for (let y = minY; y <= maxY; y++) {
+	        let nodes = [];
+	        for (let i = 0; i < 4; i++) {
+	            let next = (i + 1) % 4;
+	            let vi = vertices[i], vn = vertices[next];
+	            if ((vi[1] < y && vn[1] >= y) || (vn[1] < y && vi[1] >= y)) {
+	                let intersectX = vi[0] + (y - vi[1]) / (vn[1] - vi[1]) * (vn[0] - vi[0]);
+	                nodes.push(intersectX);
+	            }
+	        }
+	        nodes.sort((na, nb) => na - nb);
+
+	        if (nodes.length >= 2) {
+	            let startX = Math.max(0, Math.floor(nodes[0]));
+	            let endX = Math.min(this.bufferWidth, Math.floor(nodes[1]));
+	            if (endX > startX) {
+	                let offset = y * this.bufferWidth + startX;
+	                this.data32.fill(col, offset, offset + (endX - startX));
+	            }
+	        }
+	    }
+	}
+
 	renderBuffer() {
 		// this.imgData.data.set(this.data8);
 		// this.ctx.putImageData(this.imgData, 0, 0);
@@ -535,7 +648,7 @@ class Game {
     					 radius: 0.2,
     					 ZPOS: 0.5,
     					 velMult: 1};
-    	this.drawMiniMap = false;
+    	this.drawMiniMap = true;
 
         // Timing
         this.lastTime = 0;
@@ -972,50 +1085,27 @@ class Game {
 
         // Top-down maze
         if (this.drawMiniMap) {
-	        const MAZE_SCALE = 30;
-	        const MAZE_START = new Point(this.area.canvas.width - MAZE_SCALE*this.myMaze.width - 10, 10);
-	        ctx.fillStyle = "#cdcd9a";
-	        ctx.fillRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE);
+	        const MAZE_SCALE = 8;
+	        const MAZE_START = new Point(this.area.bufferWidth - MAZE_SCALE*this.myMaze.width - 2, 2);
+	        this.area.fillBufferRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE,
+	        			 205, 205, 154);
 	        
 	        // draw top down player on maze
-	        ctx.fillStyle = "#1e1e1e";
-	        ctx.strokeStyle = "#ff1e1e";
-	        ctx.lineWidth = "3";
-	     	ctx.beginPath();
-			ctx.arc(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE, MAZE_SCALE*this.myPlayer.radius, 0, Math.PI*2);
-			ctx.fill();
-			ctx.beginPath();
-			ctx.moveTo(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE);
-			ctx.lineTo(MAZE_START.x + (this.myPlayer.pos.x + Math.cos(this.myPlayer.rotX)) * MAZE_SCALE, MAZE_START.y + (this.myPlayer.pos.y + Math.sin(this.myPlayer.rotX)) * MAZE_SCALE);
-			ctx.stroke();
+			this.area.fillBufferCirc(floor(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE), floor(MAZE_SCALE*this.myPlayer.radius),
+									 30, 30, 30);
+			
+			this.area.drawBufferLineThin(
+				floor(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE),
+				floor(MAZE_START.x + (this.myPlayer.pos.x + Math.cos(this.myPlayer.rotX)) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y + Math.sin(this.myPlayer.rotX)) * MAZE_SCALE),
+				255, 30, 30);
 
-	    	ctx.strokeStyle = "#9a9acd";
-	    	ctx.lineWidth = "5";
 	        for (const s of this.myMaze.segments) {
-	        	ctx.beginPath();
-	        	ctx.moveTo(s.p1.x * MAZE_SCALE + MAZE_START.x, s.p1.y * MAZE_SCALE + MAZE_START.y);
-	        	ctx.lineTo(s.p2.x * MAZE_SCALE + MAZE_START.x, s.p2.y * MAZE_SCALE + MAZE_START.y);
-	        	ctx.stroke();
+				this.area.drawBufferLineThin(
+	        		floor(s.p1.x * MAZE_SCALE + MAZE_START.x), floor(s.p1.y * MAZE_SCALE + MAZE_START.y),
+	        		floor(s.p2.x * MAZE_SCALE + MAZE_START.x), floor(s.p2.y * MAZE_SCALE + MAZE_START.y),
+	        		154, 154, 205);
 	        }
-
-	        // draw quad tree
-	        // let i = 0;
-	        // let bounds = [this.myMaze.tree.root];
-	        // while (true) {
-	        // 	if (bounds[i] == undefined) break;
-	        // 	if (bounds[i].children != null) {
-	        // 		for (let j = 0; j < bounds[i].children.length; j++) {
-	        // 			bounds.push(bounds[i].children[j]);
-	        // 		}
-	        // 	}
-	        // 	i++;
-	        // }
-	        // for (let i = 0; i < bounds.length; i++) {
-	        // 	ctx.strokeStyle = `rgba(${floor(i/bounds.length * 255)},100,100, 0.5)`;
-			// 	ctx.strokeRect(MAZE_START.x + (bounds[i].bounds.min.x) * MAZE_SCALE, MAZE_START.y + (bounds[i].bounds.min.y) * MAZE_SCALE, (bounds[i].bounds.max.x - bounds[i].bounds.min.x) * MAZE_SCALE, (bounds[i].bounds.max.y - bounds[i].bounds.min.y) * MAZE_SCALE);
-	        // }
 	    }
-
 
 
         // Debug info
