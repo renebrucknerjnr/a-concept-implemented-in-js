@@ -973,8 +973,10 @@ class Game {
 			const rayDirY1 = dirY + planeY;
 
 			// three
-			const stepX = rowDist * (rayDirX1 - rayDirX0) / SCREEN_WIDTH;
-			const stepY = rowDist * (rayDirY1 - rayDirY0) / SCREEN_WIDTH;
+			// const stepX = rowDist * (rayDirX1 - rayDirX0) / SCREEN_WIDTH * BAR_WIDTH;
+			// const stepY = rowDist * (rayDirY1 - rayDirY0) / SCREEN_WIDTH * BAR_WIDTH;
+			const stepX = rowDist * (rayDirX1 - rayDirX0) / RAY_NUMBER;
+			const stepY = rowDist * (rayDirY1 - rayDirY0) / RAY_NUMBER;
 
 			let floorX = this.myPlayer.pos.x + rowDist * rayDirX0;
 			let floorY = this.myPlayer.pos.y + rowDist * rayDirY0;
@@ -984,39 +986,36 @@ class Game {
 			const rowDistC = ((1 - cameraZ) * F) / (horizon - ceilY); // world distance to floor
 
 			// four
-			// for (let i = 0; i < RAY_NUMBER; i++) {
-			// 	const x = floor(i * BAR_WIDTH);
-			// 	const x1 = floor((i + 1) * BAR_WIDTH);
+			for (let j = 0; j < RAY_NUMBER; j++) {
+				const x = floor(j * BAR_WIDTH);
+				const x1 = floor((j + 1) * BAR_WIDTH);
 
-			// 	const cellX = floor(floorX);
-			// 	const cellY = floor(floorY);
+				const cellX = floor(floorX);
+				const cellY = floor(floorY);
 
-			// 	const tx = floorX - cellX; // fract
-			// 	const ty = floorY - cellY;
+				const tx = floorX - cellX; // fract
+				const ty = floorY - cellY;
 
-			// 	// sample texture
+				// sample texture
 
-			// 	floorX += stepX;
-			// 	floorY += stepY;
+				floorX += stepX;
+				floorY += stepY;
 
-			// 	const light = 1 / (1 + rowDist * 0.7)
-			// 	const light2 = 1 / (1 + rowDistC * 0.7)
-			// 	ctx.fillStyle = `rgb(30, ${((cellX)%2 == 0 ? 30 : 100)}, ${clamp(light*255, 30, 255)})`;
-	        // 	ctx.fillRect(x, floor(y), x1 - x, floor(y1) - floor(y)); // floor
-			// 	ctx.fillStyle = `rgb(${clamp(light2*255, 30, 255)}, 30, 30)`;
-	        // 	ctx.fillRect(x, floor(ceilY), x1 - x, floor(ceilY1) - floor(ceilY)); // ceil
-			// }
+				const light = 1 / (1 + rowDist * 0.7);
+				const light2 = 1 / (1 + rowDistC * 0.7);
+				
+				this.area.fillBufferRect(x, floor(y), x1 - x, floor(y1) - floor(y),
+        							 	 30, (floor(fract(this.myMaze.solutionSDF(new Point(floorX, floorY))*2)*255)), clamp(floor(light*255), 30, 255)); // floor
+
+				// this.area.fillBufferRect(x, floor(ceilY), x1 - x, floor(ceilY1) - floor(ceilY),
+        		// 					 	 30, (floor(fract(this.myMaze.solutionSDF(new Point(floorX, floorY))*2)*255)), clamp(floor(light2*255), 30, 255)); // ceil
+			}
 
 			// scanlines
-			const light = 1 / (1 + rowDist * 0.7)
-			const light2 = 1 / (1 + rowDistC * 0.7)
-			// ctx.fillStyle = `rgb(30, 30, ${clamp(light*255, 30, 255)})`;
-        	// ctx.fillRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y)); // floor
-			// ctx.fillStyle = `rgb(${clamp(light2*255, 30, 255)}, 30, 30)`;
-        	// ctx.fillRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY)); // ceiling
-
-        	this.area.fillBufferRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y),
-        							 30, 30, clamp(floor(light*255), 30, 255)); // floor
+			// const light = 1 / (1 + rowDist * 0.7);
+			const light2 = 1 / (1 + rowDistC * 0.7);
+        	// this.area.fillBufferRect(0, floor(y), SCREEN_WIDTH, floor(y1) - floor(y),
+        	// 						 30, 30, clamp(floor(light*255), 30, 255)); // floor
         	this.area.fillBufferRect(0, floor(ceilY), SCREEN_WIDTH, floor(ceilY1) - floor(ceilY),
         							 clamp(floor(light2*255), 30, 255), 30, 30); // ceiling
         }
@@ -1087,9 +1086,20 @@ class Game {
         if (this.drawMiniMap) {
 	        const MAZE_SCALE = 8;
 	        const MAZE_START = new Point(this.area.bufferWidth - MAZE_SCALE*this.myMaze.width - 2, 2);
+
+	        // maze floor (background)
 	        this.area.fillBufferRect(MAZE_START.x, MAZE_START.y, this.myMaze.width * MAZE_SCALE, this.myMaze.height * MAZE_SCALE,
 	        			 205, 205, 154);
 	        
+	        // solution
+	        for (const s of this.myMaze.solutionSegments) {
+				this.area.drawBufferLineThick(
+	        		floor(s.p1.x * MAZE_SCALE + MAZE_START.x), floor(s.p1.y * MAZE_SCALE + MAZE_START.y),
+	        		floor(s.p2.x * MAZE_SCALE + MAZE_START.x), floor(s.p2.y * MAZE_SCALE + MAZE_START.y),
+	        		2,
+	        		205, 154, 205);
+	        }
+
 	        // draw top down player on maze
 			this.area.fillBufferCirc(floor(MAZE_START.x + (this.myPlayer.pos.x) * MAZE_SCALE), floor(MAZE_START.y + (this.myPlayer.pos.y) * MAZE_SCALE), floor(MAZE_SCALE*this.myPlayer.radius),
 									 30, 30, 30);
@@ -1104,15 +1114,6 @@ class Game {
 	        		floor(s.p1.x * MAZE_SCALE + MAZE_START.x), floor(s.p1.y * MAZE_SCALE + MAZE_START.y),
 	        		floor(s.p2.x * MAZE_SCALE + MAZE_START.x), floor(s.p2.y * MAZE_SCALE + MAZE_START.y),
 	        		154, 154, 205);
-	        }
-
-	        // solution
-	        for (const s of this.myMaze.solutionSegments) {
-				this.area.drawBufferLineThick(
-	        		floor(s.p1.x * MAZE_SCALE + MAZE_START.x), floor(s.p1.y * MAZE_SCALE + MAZE_START.y),
-	        		floor(s.p2.x * MAZE_SCALE + MAZE_START.x), floor(s.p2.y * MAZE_SCALE + MAZE_START.y),
-	        		2,
-	        		205, 154, 205);
 	        }
 	    }
 

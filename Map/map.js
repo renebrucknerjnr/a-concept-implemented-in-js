@@ -434,7 +434,7 @@ class Maze {
 			constructor(p, parent=null, g=null) {
 				this.p = p;
 				this.parent = parent;
-				this.g = (g == null ? parent.g + Math.sqrt((parent.x - p.x)**2 + (parent.y - p.y)**2) : g); // exact cost from starting point
+				this.g = (g == null ? parent.g + Math.sqrt((parent.p.x - p.x)**2 + (parent.p.y - p.y)**2) : g); // exact cost from starting point
 				this.h = Math.sqrt((target.x - p.x)**2 + (target.y - p.y)**2); // estimated cost to end point
 				this.f = this.g + this.h;
 			}
@@ -445,23 +445,46 @@ class Maze {
 
 
 		let currentPos = new Nod(start, null, 0);
-		let visited = [currentPos];
+		let visited = new Map();
+		let searched = new Map();
+		let shortestPath = [];
 		while (true) {
-			for (const n of visited) { // select next search location
-				if (n.f < currentPos.f) currentPos = n;
-			}
-
-			if (currentPos.h < 1) break;
-
 			for (let rayI = 0; rayI < rayN; rayI++) {
 				let dir = new Point(Math.cos(rayI / rayN * 2 * Math.PI), Math.sin(rayI / rayN * 2 * Math.PI));
 				let cast = this.tree.raycastNearest(currentPos.p, dir);
 				if (!cast || cast.t > 1.0) { // no wall hit
-					let p = new Point(currentPos.x + dir.x, currentPos.y + dir.y);
-					visited.push(new Nod(p, currentPos));
+					let n = new Nod(new Point(currentPos.p.x + dir.x, currentPos.p.y + dir.y), currentPos);
+					visited.set(pointKey(n.p), n);
 				}
 			}
+
+			if (visited.size < 1) break;
+
+			currentPos.f = this.width * this.height + 10;
+			for (const [key, val] of visited) { // select next search location
+				if (val.f < currentPos.f && pointKey(currentPos.p) != pointKey(val.p)) currentPos = val;
+			}
+			searched.set(pointKey(currentPos.p), currentPos);
+			visited.delete(pointKey(currentPos.p));
+
+			if (currentPos.h < 1) break;
+		}
+
+		if (searched.size < 1) return;
+
+		shortestPath.push(searched.values().toArray()[searched.size-1]);
+		let i = 0;
+		while (true) {
+			if (shortestPath[i].parent) {
+				shortestPath.push(shortestPath[i].parent);
+				i++;
+				continue
+			}
 			break;
+		}
+		
+		for (let j = 0; j < i; j++) {
+			this.solutionSegments.push(new Segment(shortestPath[j+0].p, shortestPath[j+1].p));
 		}
 	}
 
@@ -487,6 +510,17 @@ class Maze {
     	}
     	hits.sort((a,b) => a.t - b.t);
     	return hits;
+	}
+
+	solutionSDF(p) {
+		// const d = (p1, p2) => {let dx = p1.x - p2.x; let dy = p1.y - p2.y; return Math.sqrt(dx * dx + dy * dy); };
+		let m = Infinity;
+		for (const s of this.solutionSegments) {
+			let d = lineSDF(p, s);
+			if (d < m) m = d;
+		}
+
+		return m;
 	}
 }
 

@@ -59,3 +59,33 @@ function hash12(a, b = 10) { // https://www.shadertoy.com/view/WXSBDV
 function clamp(v, l, u) {
     return (v < l ? l : (v > u ? u : v)); // Math.max(l,Math.min(u, v));
 }
+
+function lineSDF(p, seg) {
+/* // https://www.shadertoy.com/new
+float lineSDF(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
+    vec2 uv = fragCoord/iResolution.xy;
+
+    vec3 col = vec3(0);
+    col.r = 1.0 - step(0.05, lineSDF(uv, vec2(0.2,0.5), vec2(0.2-0.6*(cos(iTime)*0.5-0.5), 0.5+0.5*(sin(iTime)))));
+    
+    col.g = 1.0 - step(0.01, distance(uv, vec2(0.2,0.5)));
+    col.b = 1.0 - step(0.01, distance(uv, vec2(0.2-0.6*(cos(iTime)*0.5-0.5), 0.5+0.5*(sin(iTime)))));
+
+    fragColor = vec4(col,1.0);
+}
+*/
+    let pa = new Point(p.x - seg.p1.x, p.y - seg.p1.y);
+    let ba = new Point(seg.p2.x - p.x, seg.p2.y - p.y);
+    let h = clamp((pa.x * ba.x + pa.y * ba.y) / (ba.x * ba.x + ba.y * ba.y), 0.0, 1.0);
+
+    let dx = pa.x - ba.x * h;
+    let dy = pa.y - ba.y * h;
+    return Math.sqrt(dx * dx + dy * dy);
+}
