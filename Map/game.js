@@ -648,7 +648,7 @@ class Game {
     					 radius: 0.2,
     					 ZPOS: 0.5,
     					 velMult: 1};
-    	this.drawMiniMap = true;
+    	this.drawMiniMap = false;
 
         // Timing
         this.lastTime = 0;
