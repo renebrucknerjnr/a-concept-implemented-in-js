@@ -153,7 +153,6 @@ class Maze {
 		this.solutionSegments = null;
 
 		this.generate(0.1);
-		this.solve();
 	}
 
 	_mergeSegments() {
@@ -393,13 +392,21 @@ class Maze {
 			this.segments[i].floor = 0;
 			this.segments[i].ceiling = 0.4 + 1.2*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length);
 			this.segments[i].texture = [];
-			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+1)))));
-			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+2)))));
-			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+3)))));
-			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+4)))));
-			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+5)))));
-			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+6)))));
-			this.segments[i].texture.push(floor(10*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+7)));
+			// this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+1))))); // red 1
+			// this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+2))))); // green 1
+			// this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+3))))); // blue 1
+			// this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+4))))); // r2
+			// this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+5))))); // g2
+			// this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+6))))); // b2
+			// this.segments[i].texture.push(floor(10*hash12(hashIndex + i, 10*hashIndex + i * this.segments.length+7)));                              // n-stripes
+
+			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex, 10*hashIndex + this.segments.length+1)))));
+			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex, 10*hashIndex + this.segments.length+2)))));
+			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex, 10*hashIndex + this.segments.length+3)))));
+			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex, 10*hashIndex + this.segments.length+4)))));
+			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex, 10*hashIndex + this.segments.length+5)))));
+			this.segments[i].texture.push(Math.max(0, Math.min(255, floor(255*hash12(hashIndex, 10*hashIndex + this.segments.length+6)))));
+			this.segments[i].texture.push(floor(10*hash12(hashIndex, 10*hashIndex + this.segments.length+7)));
 		}
 	}
 		
@@ -423,6 +430,8 @@ class Maze {
 		this._giveRandomHeights();
 
 		this._generateTree();
+
+		this.solve();
 	}
 
 	solve() {

@@ -1005,7 +1005,7 @@ class Game {
 				const light2 = 1 / (1 + rowDistC * 0.7);
 				
 				this.area.fillBufferRect(x, floor(y), x1 - x, floor(y1) - floor(y),
-        							 	 30, (floor(fract(this.myMaze.solutionSDF(new Point(floorX, floorY))*2)*255)), clamp(floor(light*255), 30, 255)); // floor
+        							 	 30, (floor(fract(this.myMaze.solutionSDF(new Point(floorX, floorY))*2)*70+30)), clamp(floor(light*255), 30, 255)); // floor
 
 				// this.area.fillBufferRect(x, floor(ceilY), x1 - x, floor(ceilY1) - floor(ceilY),
         		// 					 	 30, (floor(fract(this.myMaze.solutionSDF(new Point(floorX, floorY))*2)*255)), clamp(floor(light2*255), 30, 255)); // ceil
