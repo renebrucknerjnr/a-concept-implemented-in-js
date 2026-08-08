@@ -635,7 +635,7 @@ class Game {
 
     	// the maze
     	this.sensitivity = 1.0;
-    	this.myMaze = new Maze(10, 10, 0);
+    	this.myMaze = new Maze(20, 20, 0);
     	this.myPlayer = {pos: new Point(0.5,0.5),  // world pos
     					 vel: new Point(0,0),  // velocity
     					 acc: new Point(0,0),  // acceleration
@@ -929,12 +929,20 @@ class Game {
         const RAY_NUMBER_2 = floor(RAY_NUMBER / 2);
         const FOV_RAD = FOV * Math.PI / 180;
         const FOV_RAD_2 = FOV_RAD * 0.5;
-        const DELTA_FOV = FOV_RAD / RAY_NUMBER;
+		
+		const DELTA_FOV = FOV_RAD / RAY_NUMBER;
         const SCREEN_WIDTH = this.area.bufferWidth;
         const SCREEN_HEIGHT = this.area.bufferHeight;
+
+        const FOV_Y = 2 * Math.atan(
+		    Math.tan(FOV_RAD_2) * SCREEN_HEIGHT / SCREEN_WIDTH
+		);
+
         const BAR_WIDTH = SCREEN_WIDTH / RAY_NUMBER;
         const BAR_HEIGHT = SCREEN_HEIGHT / RAY_NUMBER;
-        const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
+        // const F = (SCREEN_WIDTH * 0.25) / Math.tan(FOV_RAD * 0.25);
+        const F = (SCREEN_WIDTH * 0.5) / Math.tan(FOV_RAD * 0.5);
+		const F_Y = (SCREEN_HEIGHT * 0.5) / Math.tan(FOV_Y * 0.5);
 		const pitch = this.myPlayer.rotY * F;
 		const horizon = SCREEN_HEIGHT * 0.5 + pitch;
 
@@ -944,6 +952,19 @@ class Game {
 		const ceilStart = 0; // ceil
 		const ceilEnd = Math.min(horizon, SCREEN_HEIGHT);
 		const ceilHeight = ceilEnd - ceilStart;
+
+		const dirX = Math.cos(this.myPlayer.rotX);
+		const dirY = Math.sin(this.myPlayer.rotX);
+
+		const planeX = -dirY * Math.tan(FOV_RAD_2);
+		const planeY =  dirX * Math.tan(FOV_RAD_2);
+
+		const rayDirX0 = dirX - planeX;
+		const rayDirY0 = dirY - planeY;
+
+		const rayDirX1 = dirX + planeX;
+		const rayDirY1 = dirY + planeY;
+
 
         // floor / ceiling
         for (let i = 0; i < RAY_NUMBER_2; i++) {
@@ -959,18 +980,8 @@ class Game {
 
 			const rowDist = (cameraZ * F) / p; // world distance to floor
 
-			// two
-			const dirX = Math.cos(this.myPlayer.rotX);
-			const dirY = Math.sin(this.myPlayer.rotX);
-
-			const planeX = -dirY * Math.tan(FOV_RAD_2);
-			const planeY =  dirX * Math.tan(FOV_RAD_2);
-
-			const rayDirX0 = dirX - planeX;
-			const rayDirY0 = dirY - planeY;
-
-			const rayDirX1 = dirX + planeX;
-			const rayDirY1 = dirY + planeY;
+			/*let floorX = this.myPlayer.pos.x + rowDist * rayDirX0;
+			let floorY = this.myPlayer.pos.y + rowDist * rayDirY0;*/
 
 			// three
 			// const stepX = rowDist * (rayDirX1 - rayDirX0) / SCREEN_WIDTH * BAR_WIDTH;
@@ -978,15 +989,18 @@ class Game {
 			const stepX = rowDist * (rayDirX1 - rayDirX0) / RAY_NUMBER;
 			const stepY = rowDist * (rayDirY1 - rayDirY0) / RAY_NUMBER;
 
-			let floorX = this.myPlayer.pos.x + rowDist * rayDirX0;
-			let floorY = this.myPlayer.pos.y + rowDist * rayDirY0;
-
 			const ceilY = ceilStart + (i / RAY_NUMBER_2) * ceilHeight;
 			const ceilY1 = ceilStart + ((i + 1) / RAY_NUMBER_2) * ceilHeight;
 			const rowDistC = ((1 - cameraZ) * F) / (horizon - ceilY); // world distance to floor
 
 			// four
 			for (let j = 0; j < RAY_NUMBER; j++) {
+				const cameraX = j / (RAY_NUMBER - 1);
+				const rayDirX = rayDirX0 + cameraX * (rayDirX1 - rayDirX0);
+				const rayDirY = rayDirY0 + cameraX * (rayDirY1 - rayDirY0);
+				const floorX = this.myPlayer.pos.x + rowDist * rayDirX;
+				const floorY = this.myPlayer.pos.y + rowDist * rayDirY;
+
 				const x = floor(j * BAR_WIDTH);
 				const x1 = floor((j + 1) * BAR_WIDTH);
 
@@ -998,8 +1012,8 @@ class Game {
 
 				// sample texture
 
-				floorX += stepX;
-				floorY += stepY;
+				// floorX += stepX;
+				// floorY += stepY;
 
 				const light = 1 / (1 + rowDist * 0.7);
 				const light2 = 1 / (1 + rowDistC * 0.7);
